@@ -42,4 +42,3 @@ Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará p
 - **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
 - **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
 - **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
-
