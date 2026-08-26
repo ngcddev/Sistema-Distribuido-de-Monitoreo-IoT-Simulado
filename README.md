@@ -1,7 +1,10 @@
-# Arquitectura del Sistema: [Nombre del Proyecto]
-
+# Arquitectura del Sistema: AgroSense 
 ## Problema que resuelve
-...
+En las zonas rurales o alejadas con un dificil acceso limitado a energía eléctrica e internet, es difícil 
+realizar un monitoreo constante de variables ambientales como lo son la temperatura, humedad, calidad del agua, estado del suelo y la calidad del aire. Por la falta de datos digitalizados y actualizados 
+dificulta la toma de decisiones en actividades como la agricultura, la investigación ambiental y el cuidado de los recursos naturales.
+
+El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta, transmite y centraliza datos ambientales, facilitando su consulta, análisis y la generación de alertas cuando los valores salen de los rangos normales.
 
 ## Servicios del sistema
 -
