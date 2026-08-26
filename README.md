@@ -1,7 +1,11 @@
-# Arquitectura del Sistema: [Nombre del Proyecto]
+# Arquitectura del Sistema: AgroSense
 
 ## Problema que resuelve
-...
+En las zonas rurales o alejadas con un dificil acceso limitado a energía eléctrica e internet, es difícil 
+realizar un monitoreo constante de variables ambientales como lo son la temperatura, humedad, calidad del agua, estado del suelo y la calidad del aire. Por la falta de datos digitalizados y actualizados 
+dificulta la toma de decisiones en actividades como la agricultura, la investigación ambiental y el cuidado de los recursos naturales.
+
+El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta, transmite y centraliza datos ambientales, facilitando su consulta, análisis y la generación de alertas cuando los valores salen de los rangos normales.
 
 ## Servicios del sistema
 -
@@ -23,7 +27,7 @@ Esta combinación permite escalar cada componente de forma independiente y aisla
 
 ## Base de datos
 
-Se usa **PostgreSQL 16** por ser un motor relacional, adecuado dado que los datos tienen una estructura fija y relaciones claras entre dispositivo, lectura y alerta.
+- Motor: se usa **PostgreSQL 16** por ser un motor relacional, adecuado dado que los datos tienen una estructura fija y relaciones claras entre dispositivos, lectura y alerta.
 
 Modelo de datos:
 
@@ -42,7 +46,7 @@ Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará p
 ## Riesgos y fallas posibles
 
 - **Caída de la base de datos**: si Postgres cae, el servicio de ingesta debe reintentar o encolar las lecturas en vez de perderlas.
-- **Escrituras concurrentes**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
+- **Escrituras concurrentes / datos duplicados**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
 - **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
 - **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
 - **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
