@@ -1,0 +1,36 @@
+services:
+  backend:
+    build: ./backend
+    container_name: iot_backend
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://iot_user:iot_pass@db:5432/iot_db
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+    networks:
+      - iot_network
+
+  db:
+    image: postgres:16-alpine
+    container_name: iot_db
+    environment:
+      POSTGRES_USER: iot_user
+      POSTGRES_PASSWORD: iot_pass
+      POSTGRES_DB: iot_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - iot_network
+
+volumes:
+  db_data:
+
+networks:
+  iot_network:
+    driver: bridge
