@@ -16,7 +16,14 @@ El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta
 ...
 
 ## Tipo de arquitectura
-...
+
+Se usa una **arquitectura híbrida** que combina tres estilos:
+
+- **Cliente–Servidor**: los usuarios acceden desde el navegador (frontend); el servidor maneja la lógica, el procesamiento y el almacenamiento.
+- **Arquitectura en capas**: separa el sistema en capa de presentación (UI), capa de lógica (validación de rangos y cálculos) y capa de persistencia (almacenamiento de lecturas e historial), lo que facilita el mantenimiento y las pruebas.
+- **Comunicación basada en eventos**: cuando el servicio de monitoreo detecta un valor fuera de rango, publica un evento que el servicio de notificaciones consume de forma asíncrona para generar la alerta.
+
+Esta combinación permite escalar cada componente de forma independiente y aislar fallos: si el servicio de notificaciones cae, el procesamiento y el cliente continúan operando sin interrupción.
 
 ## Base de datos
 
