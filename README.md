@@ -13,6 +13,7 @@ El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta
 -
 
 ## Comunicación entre servicios
+
 Los servicios del sistema se encuentran conectados entre sí para intercambiar información y realizar sus funciones de manera coordinada. Cada servicio cumple una función específica y se comunica con los demás cuando necesita datos o cuando ocurre algún evento.
 
 -. El Servicio de Monitoreo recibe los datos generados por el Servicio de Simulación IoT para procesarlos y analizar el estado de las variables monitoreadas.
@@ -24,6 +25,7 @@ Monitoreo → recibe datos → Simulación IoT
 Simulación IoT → proporciona datos → Monitoreo
 Monitoreo → genera alerta → Notificaciones
 Notificaciones → procesa alerta → genera notificación
+
 
 ## Tipo de arquitectura
 
