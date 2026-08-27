@@ -1,0 +1,144 @@
+### Python / Flask ###
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Entornos virtuales
+.env
+.env.*
+!.env.example
+venv/
+env/
+ENV/
+.venv/
+env.bak/
+venv.bak/
+
+# Flask
+instance/
+.webassets-cache
+flask_session/
+
+# Testing / coverage
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+htmlcov/
+
+# Jupyter / IPython
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Django (por si acaso)
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+### Node / React / Front ###
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnp
+.pnp.js
+.pnp.cjs
+
+# Builds
+dist/
+build/
+out/
+.next/
+.nuxt/
+.output/
+.vite/
+.cache/
+.parcel-cache/
+storybook-static/
+
+# Testing
+coverage/
+
+# Env vars front
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Vite / CRA
+*.local
+
+### Bases de datos / IoT simulado ###
+*.sqlite3
+*.db
+*.db-journal
+
+### Logs ###
+logs/
+*.log
+
+### Editores / IDEs ###
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+### Sistema operativo ###
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+### Docker ###
+*.pid
+
+### Misc ###
+*.bak
+*.tmp
+.env.backup
+
+### Claude Code (uso personal, no del equipo) ###
+.claude/
