@@ -50,3 +50,14 @@ flowchart TD
 | Monitoreo | Mediciones | Últimas lecturas de un sensor | `GET /mediciones?sensor_id=X` |
 | Monitoreo | Sensores | Datos del sensor (tipo, ubicación) | `GET /sensores/:id` |
 | Simulador | Mediciones | Registrar una nueva lectura | `POST /mediciones` |
+
+## 6. Decisiones y cambios respecto al diseño inicial
+
+- Respecto al diseño anterior se propone utilizar distintos servicios propios para realizar el flujo de trabajo visto en clase, el cual es dockerización desde dockerfile -> docker img -> docker container para su posterior prueba y verificación.
+
+## 7. Qué queda pendiente
+
+- Lógica real de los tres microservicios (escalarlos a un funcionamiento más adecuado).
+- Implementación del Simulador como proceso que hace `POST` periódico.
+- Persistencia de datos (base de datos).
+- Autenticación, seguridad y despliegue en la nube (fuera del alcance de este avance).
