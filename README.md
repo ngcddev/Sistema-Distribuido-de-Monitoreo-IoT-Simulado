@@ -1,5 +1,4 @@
-# Arquitectura del Sistema: AgroSense
-
+# Arquitectura del Sistema: AgroSense 
 ## Problema que resuelve
 En las zonas rurales o alejadas con un dificil acceso limitado a energía eléctrica e internet, es difícil 
 realizar un monitoreo constante de variables ambientales como lo son la temperatura, humedad, calidad del agua, estado del suelo y la calidad del aire. Por la falta de datos digitalizados y actualizados 
@@ -63,4 +62,8 @@ Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará p
 - **Escrituras concurrentes / datos duplicados**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
 - **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
 - **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
+<<<<<<< HEAD
 - **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
+=======
+- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
+>>>>>>> origin
