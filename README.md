@@ -8,9 +8,11 @@ dificulta la toma de decisiones en actividades como la agricultura, la investiga
 El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta, transmite y centraliza datos ambientales, facilitando su consulta, análisis y la generación de alertas cuando los valores salen de los rangos normales.
 
 ## Servicios del sistema
--
--
--
+Para funcionar como un sistema distribuido, la plataforma de monitoreo IoT se divide en tres servicios independientes, donde cada uno tiene una responsabilidad específica:
+
+- **Servicio de Simulación IoT**: Se encarga de generar de forma autónoma los datos simulados de los sensores, representando mediciones de variables ambientales como temperatura y humedad.
+- **Servicio de Monitoreo**: Recibe y procesa la información del servicio de simulación, analizando los datos para verificar si se encuentran dentro de los rangos normales o si existe alguna desviación.
+- **Servicio de Notificaciones**: Se activa únicamente cuando el Servicio de Monitoreo detecta una condición fuera de rango, encargándose de generar y enviar las alertas correspondientes.
 
 ## Comunicación entre servicios
 
