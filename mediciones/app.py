@@ -37,4 +37,4 @@ def obtener_mediciones():
     return jsonify(resultado), 200
 
 if __name__ == "__main__":
-    app.run(host="localhost", port=5001) 
+    app.run(host="localhost", port=5001) # cambiar a host="0.0.0.0" para poder dockerizar
