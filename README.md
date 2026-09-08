@@ -1,69 +1,126 @@
-# Arquitectura del Sistema: AgroSense 
-## Problema que resuelve
-En las zonas rurales o alejadas con un dificil acceso limitado a energía eléctrica e internet, es difícil 
-realizar un monitoreo constante de variables ambientales como lo son la temperatura, humedad, calidad del agua, estado del suelo y la calidad del aire. Por la falta de datos digitalizados y actualizados 
-dificulta la toma de decisiones en actividades como la agricultura, la investigación ambiental y el cuidado de los recursos naturales.
+# Sistema Distribuido de Monitoreo IoT Simulado
 
-El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta, transmite y centraliza datos ambientales, facilitando su consulta, análisis y la generación de alertas cuando los valores salen de los rangos normales.
+Sistema distribuido para generar, registrar y consultar mediciones ambientales sin depender de hardware físico. El proyecto utiliza microservicios independientes que se comunican mediante HTTP/REST.
 
-## Servicios del sistema
-Para funcionar como un sistema distribuido, la plataforma de monitoreo IoT se divide en tres servicios independientes, donde cada uno tiene una responsabilidad específica:
+## Estado actual
 
-- **Servicio de Simulación IoT**: Se encarga de generar de forma autónoma los datos simulados de los sensores, representando mediciones de variables ambientales como temperatura y humedad.
-- **Servicio de Monitoreo**: Recibe y procesa la información del servicio de simulación, analizando los datos para verificar si se encuentran dentro de los rangos normales o si existe alguna desviación.
-- **Servicio de Notificaciones**: Se activa únicamente cuando el Servicio de Monitoreo detecta una condición fuera de rango, encargándose de generar y enviar las alertas correspondientes.
+En este avance están implementados los siguientes componentes:
 
-## Comunicación entre servicios
+| Componente | Responsabilidad | Estado |
+|---|---|---|
+| Mediciones | Recibe y consulta lecturas | Implementado |
+| Monitoreo | Calcula resúmenes por sensor | Implementado |
+| Simulador | Genera y envía lecturas periódicamente | Implementado como proceso local |
+| Sensores | Catálogo de sensores | Pendiente de integración en esta rama |
+| Home | Interfaz principal | Pendiente |
 
-Los servicios del sistema se encuentran conectados entre sí para intercambiar información y realizar sus funciones de manera coordinada. Cada servicio cumple una función específica y se comunica con los demás cuando necesita datos o cuando ocurre algún evento.
+Las mediciones se almacenan temporalmente en memoria. Al reiniciar el servicio de Mediciones, los datos se pierden.
 
--. El Servicio de Monitoreo recibe los datos generados por el Servicio de Simulación IoT para procesarlos y analizar el estado de las variables monitoreadas.
--. El Servicio de Notificaciones recibe eventos del Servicio de Monitoreo cuando se detecta que algún valor está fuera de los rangos establecidos.
--. El Servicio de Simulación IoT responde proporcionando los datos simulados de los sensores al Servicio de Monitoreo.
--. El Servicio de Monitoreo genera eventos de alerta cuando detecta condiciones anormales, y el Servicio de Notificaciones procesa estos eventos y genera la notificación correspondiente.
+## Estructura del proyecto
 
-Monitoreo → recibe datos → Simulación IoT
-Simulación IoT → proporciona datos → Monitoreo
-Monitoreo → genera alerta → Notificaciones
-Notificaciones → procesa alerta → genera notificación
+```text
+.
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── servicios/
+│       ├── servicio-1-mediciones.md
+│       ├── servicio-2-monitoreo.md
+│       └── servicio-3-simulador.md
+├── mediciones/
+│   ├── app.py
+│   └── requirements.txt
+├── monitoreo/
+│   ├── app.py
+│   └── requirements.txt
+├── simulador/
+│   ├── app.py
+│   └── requirements.txt
+├── compose.yml
+├── docker-compose.yml
+└── README.md
+```
 
+## Servicios
 
-## Tipo de arquitectura
+### Mediciones
 
-Se usa una **arquitectura híbrida** que combina tres estilos:
+Expone el servicio en el puerto `5001`.
 
-- **Cliente–Servidor**: los usuarios acceden desde el navegador (frontend); el servidor maneja la lógica, el procesamiento y el almacenamiento.
-- **Arquitectura en capas**: separa el sistema en capa de presentación (UI), capa de lógica (validación de rangos y cálculos) y capa de persistencia (almacenamiento de lecturas e historial), lo que facilita el mantenimiento y las pruebas.
-- **Comunicación basada en eventos**: cuando el servicio de monitoreo detecta un valor fuera de rango, publica un evento que el servicio de notificaciones consume de forma asíncrona para generar la alerta.
+- `GET /health`: comprueba disponibilidad.
+- `POST /mediciones`: registra una medición.
+- `GET /mediciones`: consulta todas las mediciones.
+- `GET /mediciones?sensor_id=<id>`: filtra por sensor.
 
-Esta combinación permite escalar cada componente de forma independiente y aislar fallos: si el servicio de notificaciones cae, el procesamiento y el cliente continúan operando sin interrupción.
+Documentación: [docs/servicios/servicio-1-mediciones.md](docs/servicios/servicio-1-mediciones.md)
 
-## Base de datos
+### Monitoreo
 
-- Motor: se usa **PostgreSQL 16** por ser un motor relacional, adecuado dado que los datos tienen una estructura fija y relaciones claras entre dispositivos, lectura y alerta.
+Expone el servicio en el puerto `5002` y consulta Mediciones para generar resúmenes.
 
-Modelo de datos:
+- `GET /health`: comprueba disponibilidad.
+- `GET /monitoreo/<sensor_id>`: devuelve cantidad, promedio y última lectura.
 
-- **devices**: id (PK), nombre, tipo_sensor, ubicacion, activo (booleano), creado_en (timestamp)
-- **readings**: id (PK), device_id (FK → devices), tipo, valor (numeric), timestamp — índice compuesto en (device_id, timestamp) para acelerar las consultas de histórico por dispositivo y rango de fechas
-- **alerts**: id (PK), reading_id (FK → readings), regla, estado, creado_en (timestamp)
+Documentación: [docs/servicios/servicio-2-monitoreo.md](docs/servicios/servicio-2-monitoreo.md)
 
-Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará particionado o purga por antigüedad.
+### Simulador
 
-## Usuarios del sistema
+Es un proceso de fondo que genera valores aleatorios de temperatura y humedad cada cinco segundos y los envía a Mediciones. Consulta el catálogo de Sensores antes de iniciar el envío.
 
-- **Administrador**: da de alta y de baja dispositivos, configura los umbrales de alerta, tiene acceso total al sistema.
-- **Operador**: solo lectura del dashboard, histórico de lecturas y reconocimiento de alertas; no puede modificar dispositivos ni umbrales.
-- **Servicio externo (integración)**: consume alertas vía webhook con token de API, sin acceso al resto del sistema.
+Documentación: [docs/servicios/servicio-3-simulador.md](docs/servicios/servicio-3-simulador.md)
 
-## Riesgos y fallas posibles
+## Comunicación
 
-- **Caída de la base de datos**: si Postgres cae, el servicio de ingesta debe reintentar o encolar las lecturas en vez de perderlas.
-- **Escrituras concurrentes / datos duplicados**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
-- **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
-- **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
-<<<<<<< HEAD
-- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
-=======
-- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
->>>>>>> origin
+```text
+Simulador --POST /mediciones--> Mediciones
+Monitoreo --GET /mediciones--> Mediciones
+Simulador --GET /sensores------> Sensores (pendiente de integración)
+```
+
+## Ejecución local
+
+Instala las dependencias de cada servicio:
+
+```bash
+pip install -r mediciones/requirements.txt
+pip install -r monitoreo/requirements.txt
+pip install -r simulador/requirements.txt
+```
+
+En terminales separadas, inicia Mediciones y Monitoreo:
+
+```bash
+python mediciones/app.py
+python monitoreo/app.py
+```
+
+El Simulador requiere que el servicio de Sensores esté disponible. Cuando Sensores se integre en la rama actual, podrá ejecutarse con:
+
+```bash
+python simulador/app.py
+```
+
+## Docker Compose
+
+El archivo `docker-compose.yml` actual levanta Mediciones y Monitoreo:
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
+
+`compose.yml` permanece reservado para la configuración distribuida que se definirá en un avance posterior.
+
+## Decisiones y pendientes
+
+- Se utiliza Flask para los servicios HTTP.
+- La comunicación entre servicios se realiza mediante HTTP/REST.
+- Las lecturas se almacenan en memoria durante este avance.
+- La integración de Sensores y Simulador en Docker Compose está pendiente.
+- La interfaz Home está pendiente.
+- La persistencia en PostgreSQL, las alertas y la autenticación quedan para avances posteriores.
+
+## Documentación adicional
+
+- [Arquitectura del sistema](docs/ARCHITECTURE.md)
+- [Servicio de Mediciones](docs/servicios/servicio-1-mediciones.md)
+- [Servicio de Monitoreo](docs/servicios/servicio-2-monitoreo.md)
+- [Servicio Simulador](docs/servicios/servicio-3-simulador.md)
