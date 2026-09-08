@@ -86,3 +86,4 @@ La documentación detallada de cada servicio se encuentra en:
 - [Servicio de Mediciones](docs/servicios/servicio-1-mediciones.md)
 - [Servicio de Monitoreo](docs/servicios/servicio-2-monitoreo.md)
 - [Servicio Simulador](docs/servicios/servicio-3-simulador.md)
+- [Servicio Home](docs/servicios/servicio-4-home.md)
