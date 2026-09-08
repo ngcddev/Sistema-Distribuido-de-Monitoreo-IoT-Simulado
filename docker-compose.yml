@@ -8,11 +8,6 @@ services:
       - mediciones
       - monitoreo
 
-  sensores:
-    build: ./sensores
-    ports:
-      - "5000:5000"
-
   mediciones:
     build: ./mediciones
     ports:
@@ -30,9 +25,7 @@ services:
   simulador:
     build: ./simulador
     environment:
-      - SENSORES_URL=http://sensores:5000
       - MEDICIONES_URL=http://mediciones:5001
       - INTERVALO_SEGUNDOS=5
     depends_on:
-      - sensores
       - mediciones

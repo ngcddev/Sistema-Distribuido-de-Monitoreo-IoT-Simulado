@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001/mediciones')
+MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001')
 
 @app.route('/health', methods=['GET'])  # check endpoint para ver si funciona el microservicio
 def health_check():
