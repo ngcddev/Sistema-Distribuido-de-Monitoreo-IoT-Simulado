@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgroSense - Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-layout">
+        
+        <!-- Menú Lateral Oscuro (Sidebar) -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <h2>AgroSense IoT</h2>
+            </div>
+            
+            <div class="sidebar-user">
+                <div class="avatar">A</div>
+                <span>Admin</span>
+                <span class="arrow">▼</span>
+            </div>
+
+            <div class="menu-section">
+                <h3>GESTIÓN IOT</h3>
+                <nav>
+                    <a href="#" class="menu-item">
+                        <span class="icon"></span> Grupos de Sensores
+                    </a>
+                    <a href="#" class="menu-item">
+                        <span class="icon"></span> Gateways
+                    </a>
+                    <a href="#" class="menu-item">
+                        <span class="icon"></span> Dispositivos
+                    </a>
+                    <!-- Elemento Activo (Azul) -->
+                    <a href="#" class="menu-item active">
+                        <span class="icon"></span> Vista Principal
+                    </a>
+                </nav>
+            </div>
+
+            <div class="menu-section">
+                <h3>SISTEMA</h3>
+                <nav>
+                    <a href="#" class="menu-item">
+                        <span class="icon"></span> Configuración
+                    </a>
+                </nav>
+            </div>
+        </aside>
+
+        <!-- Área Principal -->
+        <main class="main-content">
+            
+            <!-- Barra Superior Blanca (Topbar) -->
+            <header class="topbar">
+                <div class="breadcrumbs">
+                    / Proyecto / <strong>Vista Principal</strong>
+                </div>
+                <div class="topbar-actions">
+                    <span class="icon"></span>
+                    <span class="icon"></span>
+                    <span class="icon"></span>
+                </div>
+            </header>
+
+            <!-- Contenido (La gran tarjeta blanca) -->
+            <div class="content-wrapper">
+                <div class="main-card">
+                    
+                    <div class="card-header">
+                        <h2>Sistema Distribuido de Monitoreo IoT (Simulado)</h2>
+                        <p>Plataforma de monitoreo ambiental distribuido. Permite la recepción, almacenamiento y análisis de datos 
+                            simulados de sensores IoT para la toma de decisiones en zonas rurales, garantizando alta disponibilidad</p>
+                    </div>
+
+                    <!-- Grilla de Servicios -->
+                    <div class="services-container">
+                        
+                        <div class="service-item">
+                            <div class="service-title"> Sensores</div>
+                            <p>Catálogo de sensores (alta, consulta, ubicación, tipo).</p>
+                        </div>
+
+                        <div class="service-item">
+                            <div class="service-title"> Mediciones</div>
+                            <p>Recibir y almacenar lecturas (reales o simuladas).</p>
+                        </div>
+
+                        <div class="service-item">
+                            <div class="service-title"> Monitoreo</div>
+                            <p>Consultar mediciones recientes, calcular alertas según umbrales.</p>
+                        </div>
+
+                        <div class="service-item">
+                            <div class="service-title"> Simulador</div>
+                            <p>Generar datos falsos periódicamente y enviarlos al sistema.</p>
+                        </div>
+
+                    </div>
+
+                    <hr class="divider">
+
+                    <!-- Sección de Equipo y Pruebas -->
+                    <div class="bottom-grid">
+                        
+                        <!-- Equipo -->
+                        <div class="team-section">
+                            <h3>Equipo de Desarrollo</h3>
+                            <ul class="team-list">
+                                <li>Nicolas Gaviria</li>
+                                <li>Jainer Chocue</li>
+                                <li>Sebastián Paja</li>
+                                <li>Freyder Pacho</li>
+                            </ul>
+                        </div>
+
+                        <!-- Prueba de Conexión -->
+                        <div class="test-section">
+                            <h3>Prueba de Conexión (Backend)</h3>
+                            <p>Verifica la comunicación HTTP con los servicios en Python.</p>
+                            <div class="action-box">
+                                <button id="btn-conectar" class="btn-primary">Ejecutar Petición GET</button>
+                                <div id="status" class="status-msg">Estado: En espera...</div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
