@@ -142,3 +142,10 @@ $RECYCLE.BIN/
 
 ### Claude Code (uso personal, no del equipo) ###
 .claude/
+.claude.json
+.claude.json.backup
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+.aider*
+.anthropic/

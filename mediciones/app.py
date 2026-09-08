@@ -36,5 +36,11 @@ def obtener_mediciones():
 
     return jsonify(resultado), 200
 
+@app.route('/mediciones/<sensor_id>', methods=['GET']) # endpoint para obtener mediciones de un sensor específico
+def obtener_mediciones_por_sensor(sensor_id):
+    resultado = [m for m in mediciones_db if m['sensor_id'] == sensor_id]
+
+    return jsonify(resultado), 200
+
 if __name__ == "__main__":
      app.run(host="0.0.0.0", port=5001) # cambiar a host="0.0.0.0" para poder dockerizar
