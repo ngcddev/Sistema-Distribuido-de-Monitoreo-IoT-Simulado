@@ -18,22 +18,5 @@ jobs:
       - name: Verificar que docker-compose.yml es válido
         run: docker compose config -q
 
-      # --- Placeholders para cuando haya código real ---
-      # Descomentar y ajustar según el lenguaje que definan.
-
-      # - name: Lint (Python)
-      #   run: |
-      #     pip install flake8
-      #     flake8 .
-
-      # - name: Lint (Node/JS)
-      #   run: |
-      #     npm ci
-      #     npm run lint
-
-      # - name: Tests
-      #   run: |
-      #     echo "Agregar comando de tests cuando existan servicios"
-
       - name: Placeholder - todavía no hay tests
         run: echo "CI funcionando. Agregar lint/tests cuando el equipo defina el stack."
