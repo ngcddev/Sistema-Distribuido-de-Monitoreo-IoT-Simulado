@@ -62,8 +62,27 @@ Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará p
 - **Escrituras concurrentes / datos duplicados**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
 - **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
 - **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
-<<<<<<< HEAD
 - **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
-=======
-- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
->>>>>>> origin
+
+## Estado actual y decisiones del avance
+
+En el estado actual del proyecto se encuentran disponibles los servicios de Mediciones y Monitoreo, además del proceso local del Simulador.
+
+- **Mediciones** recibe y consulta lecturas mediante una API Flask en el puerto `5001`.
+- **Monitoreo** consulta Mediciones y calcula resúmenes por sensor mediante una API Flask en el puerto `5002`.
+- **Simulador** genera valores de temperatura y humedad y los envía periódicamente al servicio de Mediciones.
+- Las mediciones se almacenan temporalmente en memoria y se pierden cuando se reinicia el servicio.
+- `docker-compose.yml` configura actualmente los servicios de Mediciones y Monitoreo.
+
+Las decisiones tomadas para este avance son:
+
+- Usar Flask para los servicios HTTP.
+- Usar HTTP/REST para la comunicación entre servicios.
+- Mantener la persistencia y la base de datos para un avance posterior.
+- Mantener la integración completa de Sensores y Simulador en Compose como trabajo pendiente.
+
+La documentación detallada de cada servicio se encuentra en:
+
+- [Servicio de Mediciones](docs/servicios/servicio-1-mediciones.md)
+- [Servicio de Monitoreo](docs/servicios/servicio-2-monitoreo.md)
+- [Servicio Simulador](docs/servicios/servicio-3-simulador.md)
