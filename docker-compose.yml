@@ -1,5 +1,17 @@
-version: "3.9"
 services:
+
+  home:
+    build: ./home
+    ports:
+      - "8080:80"
+    depends_on:
+      - mediciones
+      - monitoreo
+
+  sensores:
+    build: ./sensores
+    ports:
+      - "5000:5000"
 
   mediciones:
     build: ./mediciones
@@ -13,4 +25,14 @@ services:
     environment:
       - MEDICIONES_URL=http://mediciones:5001
     depends_on:
+      - mediciones
+
+  simulador:
+    build: ./simulador
+    environment:
+      - SENSORES_URL=http://sensores:5000
+      - MEDICIONES_URL=http://mediciones:5001
+      - INTERVALO_SEGUNDOS=5
+    depends_on:
+      - sensores
       - mediciones
