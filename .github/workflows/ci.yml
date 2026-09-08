@@ -15,8 +15,8 @@ jobs:
       - name: Descargar el código del PR
         uses: actions/checkout@v4
 
-      # - name: Verificar que docker-compose.yml es válido
-      # run: docker compose config
+      - name: Verificar que docker-compose.yml es válido
+        run: docker compose config -q
 
       # --- Placeholders para cuando haya código real ---
       # Descomentar y ajustar según el lenguaje que definan.
