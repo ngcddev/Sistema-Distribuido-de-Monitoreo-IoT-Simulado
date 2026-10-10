@@ -6,10 +6,12 @@ app = Flask(__name__)
 
 MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001')
 
+
 UMBRALES_CONFIG = {
     "temperatura": {"unidad": "C", "min": 10.0, "max": 35.0},
     "huedad": {"unidad": "%", "min": 30.0, "max": 80.0}
 }
+
 
 @app.route('/health', methods=['GET'])  # check endpoint para ver si funciona el microservicio
 def health_check():

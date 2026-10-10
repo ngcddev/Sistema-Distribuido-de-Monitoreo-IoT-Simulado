@@ -1,69 +1,156 @@
-# Arquitectura del Sistema: AgroSense 
+# Sistema Distribuido de Monitoreo IoT (Simulado) — AgroSense
+
 ## Problema que resuelve
-En las zonas rurales o alejadas con un dificil acceso limitado a energía eléctrica e internet, es difícil 
-realizar un monitoreo constante de variables ambientales como lo son la temperatura, humedad, calidad del agua, estado del suelo y la calidad del aire. Por la falta de datos digitalizados y actualizados 
-dificulta la toma de decisiones en actividades como la agricultura, la investigación ambiental y el cuidado de los recursos naturales.
 
-El sistema resuelve esto mediante una red de sensores IoT simulada que recolecta, transmite y centraliza datos ambientales, facilitando su consulta, análisis y la generación de alertas cuando los valores salen de los rangos normales.
+En zonas rurales o alejadas, con acceso limitado a energía eléctrica e internet, es
+difícil realizar un monitoreo constante de variables ambientales como temperatura,
+humedad, calidad del agua, estado del suelo y calidad del aire. La falta de datos
+digitalizados y actualizados dificulta la toma de decisiones en actividades como la
+agricultura, la investigación ambiental y el cuidado de los recursos naturales.
 
-## Servicios del sistema
-Para funcionar como un sistema distribuido, la plataforma de monitoreo IoT se divide en tres servicios independientes, donde cada uno tiene una responsabilidad específica:
+El sistema resuelve esto mediante una red de sensores IoT **simulada** que recolecta,
+transmite y centraliza datos ambientales, facilitando su consulta y análisis, y
+sentando la base para la generación de alertas cuando los valores salen de rango.
 
-- **Servicio de Simulación IoT**: Se encarga de generar de forma autónoma los datos simulados de los sensores, representando mediciones de variables ambientales como temperatura y humedad.
-- **Servicio de Monitoreo**: Recibe y procesa la información del servicio de simulación, analizando los datos para verificar si se encuentran dentro de los rangos normales o si existe alguna desviación.
-- **Servicio de Notificaciones**: Se activa únicamente cuando el Servicio de Monitoreo detecta una condición fuera de rango, encargándose de generar y enviar las alertas correspondientes.
+## Objetivo
+
+Diseñar y comenzar a materializar, mediante contenedores, una solución distribuida
+basada en microservicios que reciba, almacene y analice mediciones de sensores
+simulados, con una vista Home como punto de entrada del usuario.
+
+## Integrantes y roles
+
+| Integrante | Rol principal |
+|---|---|
+| Nicolas Gaviria | Arquitectura, Docker Compose e integración |
+| Jainer Chocue | Servicios Mediciones y Monitoreo (APIs REST) |
+| Sebastián Paja | Dockerfiles y contenerización de los servicios |
+| Freyder Pacho | Vista Home y documentación |
+
+> El proyecto se construye de forma colaborativa; cada integrante tiene una
+> responsabilidad principal pero participa en la revisión del trabajo del resto.
+
+## Arquitectura
+
+Se usa una **arquitectura de microservicios** sobre un estilo **cliente–servidor**:
+el usuario accede desde el navegador a la vista Home, y cada responsabilidad del
+sistema (almacenar mediciones, calcular resúmenes, generar datos) vive en un servicio
+independiente que se comunica por **HTTP/REST con JSON**.
+
+```mermaid
+flowchart TD
+    U[Usuario] --> H[Home]
+    H --> M[Mediciones]
+    H --> MO[Monitoreo]
+    MO -- consulta lecturas --> M
+    SIM[Simulador] -- POST medicion --> M
+```
+
+El detalle completo (componentes, decisiones y pendientes) está en
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Cambio respecto al diseño inicial
+
+Se **descartó el servicio de Sensores** para este avance. El catálogo de sensores se
+maneja como una lista fija dentro del Simulador; un servicio de Sensores independiente
+se evaluará más adelante si la gestión de dispositivos lo justifica.
+
+## Servicios
+
+| Servicio | Responsabilidad | Puerto | Se comunica con |
+|---|---|---|---|
+| **Home** | Vista web estática (Nginx). Punto de entrada del usuario. | `8080` | — |
+| **Mediciones** | Recibir y almacenar lecturas (simuladas) y permitir consultarlas por sensor. API Flask. | `5001` | Monitoreo, Simulador |
+| **Monitoreo** | Consultar las mediciones de un sensor y calcular un resumen (cantidad, promedio, última lectura). API Flask. | `5002` | Mediciones |
+| **Simulador** | Generar valores de temperatura y humedad para un catálogo fijo de sensores y enviarlos periódicamente a Mediciones. Proceso, no expone API. | — | Mediciones |
+
+Documentación detallada de cada servicio:
+
+- [Servicio de Mediciones](docs/servicios/servicio-1-mediciones.md)
+- [Servicio de Monitoreo](docs/servicios/servicio-2-monitoreo.md)
+- [Servicio Simulador](docs/servicios/servicio-3-simulador.md)
+- [Servicio Home](docs/servicios/servicio-4-home.md)
 
 ## Comunicación entre servicios
 
-Los servicios del sistema se encuentran conectados entre sí para intercambiar información y realizar sus funciones de manera coordinada. Cada servicio cumple una función específica y se comunica con los demás cuando necesita datos o cuando ocurre algún evento.
+| Quién solicita | A quién | Qué información | Método HTTP |
+|---|---|---|---|
+| Monitoreo | Mediciones | Últimas lecturas de un sensor | `GET /mediciones?sensor_id=X` |
+| Simulador | Mediciones | Registrar una nueva lectura | `POST /mediciones` |
 
--. El Servicio de Monitoreo recibe los datos generados por el Servicio de Simulación IoT para procesarlos y analizar el estado de las variables monitoreadas.
--. El Servicio de Notificaciones recibe eventos del Servicio de Monitoreo cuando se detecta que algún valor está fuera de los rangos establecidos.
--. El Servicio de Simulación IoT responde proporcionando los datos simulados de los sensores al Servicio de Monitoreo.
--. El Servicio de Monitoreo genera eventos de alerta cuando detecta condiciones anormales, y el Servicio de Notificaciones procesa estos eventos y genera la notificación correspondiente.
+## Docker
 
-Monitoreo → recibe datos → Simulación IoT
-Simulación IoT → proporciona datos → Monitoreo
-Monitoreo → genera alerta → Notificaciones
-Notificaciones → procesa alerta → genera notificación
+Todos los componentes están contenerizados:
 
+| Componente | Imagen base | Dockerfile |
+|---|---|---|
+| Home | `nginx:alpine` | `home/Dockerfile` |
+| Mediciones | `python:3.12-slim` | `mediciones/Dockerfile` |
+| Monitoreo | `python:3.12-slim` | `monitoreo/Dockerfile` |
+| Simulador | `python:3.12-slim` | `simulador/Dockerfile` |
 
-## Tipo de arquitectura
+## Docker Compose
 
-Se usa una **arquitectura híbrida** que combina tres estilos:
+Levantar todo el sistema:
 
-- **Cliente–Servidor**: los usuarios acceden desde el navegador (frontend); el servidor maneja la lógica, el procesamiento y el almacenamiento.
-- **Arquitectura en capas**: separa el sistema en capa de presentación (UI), capa de lógica (validación de rangos y cálculos) y capa de persistencia (almacenamiento de lecturas e historial), lo que facilita el mantenimiento y las pruebas.
-- **Comunicación basada en eventos**: cuando el servicio de monitoreo detecta un valor fuera de rango, publica un evento que el servicio de notificaciones consume de forma asíncrona para generar la alerta.
+```bash
+docker compose up --build
+```
 
-Esta combinación permite escalar cada componente de forma independiente y aislar fallos: si el servicio de notificaciones cae, el procesamiento y el cliente continúan operando sin interrupción.
+Servicios expuestos:
 
-## Base de datos
+- Home: <http://localhost:8080>
+- Mediciones (API): <http://localhost:5001>
+- Monitoreo (API): <http://localhost:5002>
 
-- Motor: se usa **PostgreSQL 16** por ser un motor relacional, adecuado dado que los datos tienen una estructura fija y relaciones claras entre dispositivos, lectura y alerta.
+Ejemplos de prueba:
 
-Modelo de datos:
+```bash
+curl http://localhost:5001/health
+curl http://localhost:5001/mediciones
+curl http://localhost:5002/monitoreo/1
+```
 
-- **devices**: id (PK), nombre, tipo_sensor, ubicacion, activo (booleano), creado_en (timestamp)
-- **readings**: id (PK), device_id (FK → devices), tipo, valor (numeric), timestamp — índice compuesto en (device_id, timestamp) para acelerar las consultas de histórico por dispositivo y rango de fechas
-- **alerts**: id (PK), reading_id (FK → readings), regla, estado, creado_en (timestamp)
+Apagar:
 
-Las lecturas crecen sin límite en el tiempo, por lo que a futuro se evaluará particionado o purga por antigüedad.
+```bash
+docker compose down
+```
 
-## Usuarios del sistema
+## Estado actual
 
-- **Administrador**: da de alta y de baja dispositivos, configura los umbrales de alerta, tiene acceso total al sistema.
-- **Operador**: solo lectura del dashboard, histórico de lecturas y reconocimiento de alertas; no puede modificar dispositivos ni umbrales.
-- **Servicio externo (integración)**: consume alertas vía webhook con token de API, sin acceso al resto del sistema.
+**Diseñado**
+- Reglas de alerta por umbrales.
+- Servicio de Notificaciones.
+- Modelo de datos relacional (PostgreSQL) para persistencia.
 
-## Riesgos y fallas posibles
+**Configurado**
+- `docker-compose.yml` con los cuatro componentes (home, mediciones, monitoreo, simulador).
+- CI en GitHub Actions que valida `docker-compose.yml` en cada Pull Request.
 
-- **Caída de la base de datos**: si Postgres cae, el servicio de ingesta debe reintentar o encolar las lecturas en vez de perderlas.
-- **Escrituras concurrentes / datos duplicados**: se mitiga con constraint único o upsert idempotente al insertar lecturas.
-- **Pico de carga del simulador**: puede saturar la ingesta; se mitiga con límite de tasa (rate limiting) o backpressure.
-- **Falla de red entre frontend y backend**: el dashboard debe mostrar la última data conocida en vez de romperse.
-<<<<<<< HEAD
-- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
-=======
-- **Riesgo de proyecto**: si no se define el broker de mensajería antes de avanzar con los demás servicios, el resto del equipo queda bloqueado para implementar comunicación asíncrona.
->>>>>>> origin
+**Implementado**
+- API REST de Mediciones (Flask, puerto 5001).
+- API REST de Monitoreo (Flask, puerto 5002), que consume Mediciones.
+- Simulador que envía lecturas de temperatura y humedad cada 5 s.
+- Vista Home servida con Nginx dentro de un contenedor.
+
+**Pendiente**
+- Persistencia en base de datos (hoy las mediciones se guardan en memoria y se pierden al reiniciar).
+- Lógica de alertas en Monitoreo y servicio de Notificaciones.
+- Conexión de la Home con los servicios para mostrar datos reales.
+- Autenticación, seguridad y despliegue en la nube (fuera del alcance de este avance).
+
+## Estructura del repositorio
+
+```
+.
+├── home/            # vista Home (HTML/CSS/JS) + Dockerfile (Nginx)
+├── mediciones/      # microservicio Mediciones (Flask) + Dockerfile
+├── monitoreo/       # microservicio Monitoreo (Flask) + Dockerfile
+├── simulador/       # generador de datos simulados + Dockerfile
+├── docs/
+│   ├── ARCHITECTURE.md
+│   └── servicios/   # documentación por servicio
+├── docker-compose.yml
+└── README.md
+```
