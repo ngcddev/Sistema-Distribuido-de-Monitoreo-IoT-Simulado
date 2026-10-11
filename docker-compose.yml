@@ -1,10 +1,25 @@
-version: "3.9"
 services:
+
+  home:
+    build: ./home
+    ports:
+      - "8080:80"
+    depends_on:
+      - mediciones
+      - monitoreo
 
   mediciones:
     build: ./mediciones
     ports:
       - "5001:5001"
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${MYSQL_DATABASE}
+    depends_on:
+      - mysql
 
   monitoreo:
     build: ./monitoreo
@@ -14,3 +29,25 @@ services:
       - MEDICIONES_URL=http://mediciones:5001
     depends_on:
       - mediciones
+
+  simulador:
+    build: ./simulador
+    environment:
+      - MEDICIONES_URL=http://mediciones:5001
+      - INTERVALO_SEGUNDOS=5
+    depends_on:
+      - mediciones
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - ./mediciones/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
