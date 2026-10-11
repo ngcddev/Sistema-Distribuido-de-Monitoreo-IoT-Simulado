@@ -33,7 +33,7 @@ def _parametros(con_bd=True):
         'connection_timeout': 5,
     }
     if con_bd:
-        parametros['database'] = os.environ.get('DB_NAME')
+        parametros['database'] = os.environ.get('DB_NAME', 'sensores')
     return parametros
 
 
