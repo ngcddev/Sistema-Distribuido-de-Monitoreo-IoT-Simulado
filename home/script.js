@@ -34,10 +34,17 @@ document.addEventListener('DOMContentLoaded', () => {
         statusText.textContent = texto;
     }
 
+    // Los datos vienen de la API y se insertan con innerHTML: se escapan para evitar XSS.
+    function escapar(valor) {
+        return String(valor).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+        });
+    }
+
     function textoFila(item) {
-        let texto = 'id ' + item.id + ' | sensor ' + item.sensor_id + ': ' + item.valor + ' ' + (item.unidad || '');
+        let texto = 'id ' + escapar(item.id) + ' | sensor ' + escapar(item.sensor_id) + ': ' + escapar(item.valor) + ' ' + escapar(item.unidad || '');
         if (item.timestamp) {
-            texto += ' (' + item.timestamp + ')';
+            texto += ' (' + escapar(item.timestamp) + ')';
         }
         return texto;
     }
@@ -113,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         marcarEstado('Consultando la fila ' + filaId + '...', '#d97706');
         try {
-            const respuesta = await fetch('/mediciones?id=' + filaId);
+            const respuesta = await fetch('/mediciones/' + encodeURIComponent(filaId));
             const data = await respuesta.json().catch(function () { return {}; });
             if (!respuesta.ok) {
                 resultado.textContent = data.error || ('GET respondió ' + respuesta.status);
@@ -176,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
         llenarCampos(data);
         resultado.textContent = textoResultado(method, data);
         if (method === 'DELETE') {
-            lecturas.innerHTML = 'La fila ' + data.id + ' ya no está.';
+            lecturas.textContent = 'La fila ' + data.id + ' ya no está.';
         } else if (data.id !== undefined) {
             lecturas.innerHTML = '<strong>' + textoFila(data) + ' ← esta fila</strong>';
         }
