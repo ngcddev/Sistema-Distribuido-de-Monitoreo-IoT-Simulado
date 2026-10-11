@@ -204,4 +204,174 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-put').addEventListener('click', function () { enviarMedicion('PUT'); });
     document.getElementById('btn-patch').addEventListener('click', function () { enviarMedicion('PATCH'); });
     document.getElementById('btn-delete').addEventListener('click', function () { enviarMedicion('DELETE'); });
+
+    // =========================================
+    // INTEGRACIÓN CON MICROSERVICIO DE MONITOREO Y GRÁFICO
+    // =========================================
+    const panelMonitoreo = document.getElementById('panel-monitoreo');
+    const inputSensorMonitoreo = document.getElementById('monitoreo-sensor-id');
+    let miGrafico = null;
+
+    async function actualizarGraficoSensor() {
+        const sensorId = inputSensorMonitoreo ? inputSensorMonitoreo.value : 1;
+        const canvas = document.getElementById('graficoMonitoreo');
+        if (!canvas) return;
+
+        try {
+            if (typeof Chart === 'undefined') return; // Chart.js no cargó (sin conexión al CDN)
+            const respuesta = await fetch('/mediciones?sensor_id=' + encodeURIComponent(sensorId) + '&limit=10');
+            if (!respuesta.ok) return;
+            const lecturasSensor = await respuesta.json();
+
+            const labels = lecturasSensor.map((l, i) => {
+                const fecha = l.timestamp ? new Date(l.timestamp) : null;
+                return fecha && !isNaN(fecha) ? fecha.toLocaleTimeString() : `L`;
+            });
+            const valores = lecturasSensor.map(l => Number(l.valor));
+
+            const ctx = canvas.getContext('2d');
+
+            if (miGrafico) {
+                miGrafico.destroy();
+            }
+
+            miGrafico = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: `Histórico Sensor ${sensorId}`,
+                        data: valores,
+                        borderColor: '#2563eb',
+                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: true } },
+                    scales: { y: { beginAtZero: false } }
+                }
+            });
+        } catch (e) {
+            console.log("Error al cargar gráfico:", e);
+        }
+    }
+
+    async function consultarResumenGeneral() {
+        panelMonitoreo.innerHTML = '<em>Cargando métricas globales de la red...</em>';
+        try {
+            const respuesta = await fetch('/monitoreo/resumen-general');
+            if (!respuesta.ok) throw new Error('Error al conectar con Monitoreo');
+            const data = await respuesta.json();
+
+            if (data.mensaje) {
+                panelMonitoreo.innerHTML = `<p>${escapar(data.mensaje)}</p>`;
+                return;
+            }
+
+            panelMonitoreo.innerHTML = `
+                <strong style="color: #2563eb;">--- Resumen Global de la Red ---</strong><br>
+                <strong>Total lecturas registradas:</strong> ${data.total_lecturas_sistema}<br>
+                <strong>Sensores activos:</strong> ${data.total_sensores_activos} (${escapar(data.listado_sensores.join(', '))})<br>
+                <strong>Promedio general del sistema:</strong> ${data.promedio_global_sistema}
+            `;
+        } catch (err) {
+            panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">Error: ${err.message}. Asegúrate de que el microservicio Monitoreo esté activo.</span>`;
+        }
+    }
+
+    async function consultarResumenSensor() {
+        const sensorId = inputSensorMonitoreo ? inputSensorMonitoreo.value : 1;
+        panelMonitoreo.innerHTML = `<em>Consultando métricas para sensor ${sensorId}...</em>`;
+        try {
+            const respuesta = await fetch(`/monitoreo/${sensorId}`);
+            const data = await respuesta.json();
+
+            if (!respuesta.ok) {
+                panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">${escapar(data.error || data.mensaje)}</span>`;
+                return;
+            }
+
+            panelMonitoreo.innerHTML = `
+                <strong style="color: #2563eb;">--- Métricas del Sensor ${escapar(data.sensor_id)} ---</strong><br>
+                <strong>Cantidad de lecturas:</strong> ${data.cantidad_lecturas}<br>
+                <strong>Promedio histórico:</strong> ${data.promedio}<br>
+                <strong>Última lectura:</strong> ${escapar(data.ultima_lectura.valor)} ${escapar(data.ultima_lectura.unidad || '')} (${escapar(data.ultima_lectura.timestamp || 'reciente')})
+            `;
+
+            actualizarGraficoSensor();
+        } catch (err) {
+            panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">Error de conexión con el microservicio Monitoreo.</span>`;
+        }
+    }
+
+    async function evaluarSensor() {
+        const sensorId = inputSensorMonitoreo ? inputSensorMonitoreo.value : 1;
+        panelMonitoreo.innerHTML = `<em>Evaluando umbrales del sensor ${sensorId}...</em>`;
+        try {
+            const respuesta = await fetch(`/monitoreo/evaluar/${sensorId}`);
+            const data = await respuesta.json();
+
+            if (!respuesta.ok) {
+                panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">${escapar(data.error || data.mensaje)}</span>`;
+                return;
+            }
+
+            const esAlerta = data.evaluacion === 'ALERTA_CRITICA';
+            const colorEstado = esAlerta ? '#b91c1c' : '#10b981';
+
+            panelMonitoreo.innerHTML = `
+                <strong style="color: ${colorEstado};">--- Evaluación: ${escapar(data.evaluacion)} ---</strong><br>
+                <strong>Sensor:</strong> ${escapar(data.sensor_id)} (${escapar(data.tipo || 'tipo desconocido')})<br>
+                <strong>Valor evaluado:</strong> ${escapar(data.valor_evaluado)}<br>
+                <strong>Diagnóstico:</strong> ${escapar(data.diagnostico)}
+            `;
+
+            actualizarGraficoSensor();
+        } catch (err) {
+            panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">Error de conexión con el microservicio Monitoreo.</span>`;
+        }
+    }
+
+    async function verUmbrales() {
+        panelMonitoreo.innerHTML = '<em>Consultando umbrales...</em>';
+        try {
+            const respuesta = await fetch('/monitoreo/umbrales');
+            if (!respuesta.ok) throw new Error('Monitoreo respondió ' + respuesta.status);
+            const umbrales = await respuesta.json();
+            panelMonitoreo.innerHTML = '<strong style="color: #2563eb;">--- Umbrales configurados ---</strong><br>' +
+                umbrales.map(function (u) {
+                    return escapar(u.tipo) + ': ' + escapar(u.minimo) + ' a ' + escapar(u.maximo) + ' ' + escapar(u.unidad || '');
+                }).join('<br>');
+        } catch (err) {
+            panelMonitoreo.innerHTML = '<span style="color: #b91c1c;">Error: ' + escapar(err.message) + '</span>';
+        }
+    }
+
+    async function verAlertas() {
+        panelMonitoreo.innerHTML = '<em>Consultando alertas...</em>';
+        try {
+            const respuesta = await fetch('/monitoreo/alertas?limit=10');
+            if (!respuesta.ok) throw new Error('Monitoreo respondió ' + respuesta.status);
+            const alertas = await respuesta.json();
+            if (!alertas.length) {
+                panelMonitoreo.innerHTML = '<p>No hay alertas registradas. Usa "Evaluar Umbrales" para generarlas.</p>';
+                return;
+            }
+            panelMonitoreo.innerHTML = '<strong style="color: #b91c1c;">--- Últimas alertas ---</strong><br>' +
+                alertas.map(function (a) {
+                    return 'sensor ' + escapar(a.sensor_id) + ' | ' + escapar(a.valor) + ' | ' + escapar(a.detalle);
+                }).join('<br>');
+        } catch (err) {
+            panelMonitoreo.innerHTML = '<span style="color: #b91c1c;">Error: ' + escapar(err.message) + '</span>';
+        }
+    }
+
+    document.getElementById('btn-ver-umbrales')?.addEventListener('click', verUmbrales);
+    document.getElementById('btn-ver-alertas')?.addEventListener('click', verAlertas);
+    document.getElementById('btn-resumen-general')?.addEventListener('click', consultarResumenGeneral);
+    document.getElementById('btn-resumen-sensor')?.addEventListener('click', consultarResumenSensor);
+    document.getElementById('btn-evaluar-sensor')?.addEventListener('click', evaluarSensor);
 });

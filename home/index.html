@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgroSense - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -109,11 +110,35 @@
                             </ul>
                         </div>
 
+                        <!-- Monitoreo y Analítica -->
                         <div class="test-section">
-                            <h3>Monitoreo</h3>
-                            <p>Resumen general de los sensores. Este espacio lo conecta el servicio de Monitoreo.</p>
-                            <div id="panel-monitoreo" class="action-box">
-                                <p>Pendiente de conectar con /monitoreo/&lt;sensor_id&gt;</p>
+                            <h3>Monitoreo de Sensores (Analytics)</h3>
+                            <p>Análisis en tiempo real consumido desde el microservicio <strong>Monitoreo (Puerto 5002)</strong>.</p>
+
+                            <div class="campos" style="margin-bottom: 15px;">
+                                <label class="campo">
+                                    Sensor a monitorear:
+                                    <input id="monitoreo-sensor-id" type="number" min="1" value="1">
+                                </label>
+                            </div>
+
+                            <div class="botones" style="margin-bottom: 15px;">
+                                <button type="button" id="btn-resumen-general" class="btn-primary">Resumen General Global</button>
+                                <button type="button" id="btn-resumen-sensor" class="btn-secondary">Métricas Sensor</button>
+                                <button type="button" id="btn-evaluar-sensor" class="btn-secondary">Evaluar Umbrales</button>
+                                <button type="button" id="btn-ver-umbrales" class="btn-secondary">Ver Umbrales</button>
+                                <button type="button" id="btn-ver-alertas" class="btn-secondary">Ver Alertas</button>
+                            </div>
+
+                            <!-- Métricas rápidas -->
+                            <div id="panel-monitoreo" class="action-box" style="text-align: left; font-size: 13px; margin-bottom: 15px;">
+                                <p style="text-align: center; color: #6b7280;">Selecciona una opción para consultar las analíticas.</p>
+                            </div>
+
+                            <!-- Gráfico en tiempo real -->
+                            <div style="background-color: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                                <h4 style="margin-bottom: 10px; color: #1f2937;">Histórico del Sensor (Tendencia)</h4>
+                                <canvas id="graficoMonitoreo" style="max-height: 250px;"></canvas>
                             </div>
                         </div>
 
