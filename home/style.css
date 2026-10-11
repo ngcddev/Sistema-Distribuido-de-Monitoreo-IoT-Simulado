@@ -1,4 +1,4 @@
-/* --- Reseteo y Fuente Estándar (No parece de IA) --- */
+
 * {
     margin: 0;
     padding: 0;
@@ -154,6 +154,10 @@ body {
     border: 1px solid #e5e7eb;
 }
 
+.vista-oculta {
+    display: none;
+}
+
 .card-header h2 {
     font-size: 22px;
     color: #1f2937;
@@ -274,4 +278,85 @@ h3 {
     font-size: 13px;
     color: #6b7280;
     font-family: monospace;
+}
+
+.resultado {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 4px;
+    font-size: 14px;
+    color: #065f46;
+    text-align: left;
+}
+
+.resultado:empty {
+    display: none;
+}
+
+.live-block {
+    margin-top: 12px;
+    text-align: left;
+    font-size: 13px;
+    color: #374151;
+}
+
+.campos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+}
+
+.campo {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.campo small {
+    font-weight: 400;
+    color: #6b7280;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.campo input {
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-weight: 400;
+}
+
+.botones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.form-title {
+    margin-top: 20px;
+}
+
+.btn-secondary, .btn-danger {
+    border: none;
+    padding: 10px 14px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: white;
+}
+
+.btn-secondary { background-color: #4b5563; }
+.btn-danger { background-color: #b91c1c; }
+
+.hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
 }
