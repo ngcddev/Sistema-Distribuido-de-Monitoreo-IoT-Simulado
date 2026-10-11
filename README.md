@@ -60,8 +60,8 @@ se evaluará más adelante si la gestión de dispositivos lo justifica.
 
 | Servicio | Responsabilidad | Puerto | Se comunica con |
 |---|---|---|---|
-| **Home** | Vista web estática (Nginx). Punto de entrada del usuario. | `8080` | — |
-| **Mediciones** | Recibir y almacenar lecturas (simuladas) en MySQL y permitir consultarlas por sensor. API Flask. | `5001` | Monitoreo, Simulador, MySQL |
+| **Home** | Vista web (Nginx). Vista general para el resumen y administración de lecturas. Nginx reenvía `/mediciones` y `/monitoreo`. | `8080` | Mediciones, Monitoreo |
+| **Mediciones** | Guardar lecturas en MySQL y consultar, crear, reemplazar, actualizar o borrar una fila por su `id`. API Flask. | `5001` | Home, Monitoreo, Simulador, MySQL |
 | **MySQL** | Persistencia de mediciones. Solo Mediciones se conecta. | `3307` (host) | Mediciones |
 | **Monitoreo** | Consultar las mediciones de un sensor y calcular un resumen (cantidad, promedio, última lectura). API Flask. | `5002` | Mediciones |
 | **Simulador** | Generar valores de temperatura y humedad para un catálogo fijo de sensores y enviarlos periódicamente a Mediciones. Proceso, no expone API. | — | Mediciones |
@@ -77,8 +77,13 @@ Documentación detallada de cada servicio:
 
 | Quién solicita | A quién | Qué información | Método HTTP |
 |---|---|---|---|
-| Monitoreo | Mediciones | Últimas lecturas de un sensor | `GET /mediciones?sensor_id=X` |
+| Home (administración) | Mediciones | Listado, una fila, alta manual, reemplazo, cambio de valor o borrado | `GET /mediciones`, `GET /mediciones?id=`, `POST`, `PUT`, `PATCH`, `DELETE /mediciones/<id>` |
+| Monitoreo | Mediciones | Lecturas de un sensor | `GET /mediciones?sensor_id=X` |
 | Simulador | Mediciones | Registrar una nueva lectura | `POST /mediciones` |
+
+En Mediciones el `id` es el número único de una fila. El `sensor_id` se repite en todas las lecturas de ese sensor. `PUT` reemplaza sensor, valor y unidad de una fila existente. `PATCH` cambia solo el valor. `POST` crea una lectura nueva; el Simulador ya lo hace cada 5 s y la administración lo ofrece como alta manual.
+
+La vista general de Home deja el recuadro de Monitoreo para conectar el resumen. Nginx ya reenvía `GET /monitoreo/<sensor_id>`.
 
 ## Docker
 
@@ -111,8 +116,11 @@ Ejemplos de prueba:
 ```bash
 curl http://localhost:5001/health
 curl http://localhost:5001/mediciones
+curl http://localhost:5001/mediciones?id=1
 curl http://localhost:5002/monitoreo/1
 ```
+
+La administración se usa en <http://localhost:8080>, menú Administración.
 
 Apagar:
 
@@ -132,14 +140,14 @@ docker compose down
 - CI en GitHub Actions que valida `docker-compose.yml` en cada Pull Request.
 
 **Implementado**
-- API REST de Mediciones (Flask, puerto 5001) con persistencia en MySQL.
+- API REST de Mediciones (Flask, puerto 5001) con persistencia en MySQL y operaciones por `id` de fila: consultar todas, consultar una, crear, reemplazar, actualizar el valor y borrar.
 - API REST de Monitoreo (Flask, puerto 5002), que consume Mediciones.
 - Simulador que envía lecturas de temperatura y humedad cada 5 s.
-- Vista Home servida con Nginx dentro de un contenedor.
+- Vista Home en Nginx, con administración conectada a Mediciones.
 
 **Pendiente**
+- Conectar el recuadro de la vista general con el resumen de Monitoreo.
 - Lógica de alertas en Monitoreo y servicio de Notificaciones.
-- Conexión de la Home con los servicios para mostrar datos reales.
 - Autenticación, seguridad y despliegue en la nube (fuera del alcance de este avance).
 
 ## Estructura del repositorio
