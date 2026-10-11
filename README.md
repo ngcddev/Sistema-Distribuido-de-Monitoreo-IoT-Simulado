@@ -44,7 +44,6 @@ flowchart TD
     H --> MO[Monitoreo]
     MO -- consulta lecturas --> M
     SIM[Simulador] -- POST medicion --> M
-    M --> DB[(MySQL)]
 ```
 
 El detalle completo (componentes, decisiones y pendientes) está en
