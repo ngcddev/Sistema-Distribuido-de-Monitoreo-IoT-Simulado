@@ -18,6 +18,7 @@ flowchart TD
     H --> MO[Monitoreo]
     MO -- consulta lecturas --> M
     SIM[Simulador] -- POST medicion --> M
+    M --> DB[(MySQL)]
 ```
 
 ## 3. Componentes
@@ -25,7 +26,8 @@ flowchart TD
 | Componente | Tipo | Estado en este avance |
 |---|---|---|
 | Home | Vista principal | Implementado y corriendo en contenedor |
-| Mediciones | Microservicio | Implementado (API Flask) y definido en Compose |
+| Mediciones | Microservicio | Implementado (API Flask + MySQL) y definido en Compose |
+| MySQL | Base de datos | Implementado (imagen `mysql:8.0`, volumen `mysql_data`) |
 | Monitoreo | Microservicio | Implementado (API Flask) y definido en Compose |
 | Simulador | Proceso generador de datos | Implementado y definido en Compose |
 
@@ -34,7 +36,8 @@ flowchart TD
 | Servicio | Responsabilidad | Información que maneja | Se comunica con |
 |---|---|---|---|
 | Home | Presentar la vista principal del sistema al usuario | Contenido estático (HTML, CSS, JS) | — (frontend estático) |
-| Mediciones | Recibir y almacenar lecturas (reales o simuladas) y permitir consultarlas | sensor_id, valor, unidad, timestamp | Monitoreo, Simulador |
+| Mediciones | Recibir y almacenar lecturas (reales o simuladas) y permitir consultarlas | sensor_id, valor, unidad, timestamp | Monitoreo, Simulador, MySQL |
+| MySQL | Persistir mediciones | filas de la tabla `mediciones` | Mediciones |
 | Monitoreo | Consultar las mediciones de un sensor y calcular un resumen (cantidad, promedio, última lectura) | resumen por sensor, umbrales y alertas (a futuro) | Mediciones |
 | Simulador | Generar valores de temperatura y humedad para un catálogo fijo de sensores y enviarlos periódicamente | — (proceso, no expone API) | Mediciones |
 
@@ -55,12 +58,11 @@ flowchart TD
   Un servicio de Sensores independiente se evaluará más adelante si la gestión de
   dispositivos (alta/baja, ubicación, estado) lo justifica.
 - La comunicación entre servicios es HTTP/REST con cuerpos JSON.
-- La persistencia en base de datos se pospone para un avance posterior; por ahora las
-  mediciones se guardan en memoria del proceso de Mediciones.
+- La persistencia de mediciones está en MySQL. Solo el servicio Mediciones se
+  conecta a la base; Monitoreo y el Simulador siguen usando HTTP/REST.
 
 ## 7. Qué queda pendiente
 
-- Persistencia de datos en base de datos (las mediciones se pierden al reiniciar).
 - Lógica de alertas por umbrales en el servicio de Monitoreo.
 - Servicio de Notificaciones que consuma los eventos de alerta.
 - Conexión de la vista Home con los servicios para mostrar datos reales.

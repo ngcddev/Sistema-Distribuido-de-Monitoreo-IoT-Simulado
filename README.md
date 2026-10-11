@@ -44,6 +44,7 @@ flowchart TD
     H --> MO[Monitoreo]
     MO -- consulta lecturas --> M
     SIM[Simulador] -- POST medicion --> M
+    M --> DB[(MySQL)]
 ```
 
 El detalle completo (componentes, decisiones y pendientes) está en
@@ -60,7 +61,8 @@ se evaluará más adelante si la gestión de dispositivos lo justifica.
 | Servicio | Responsabilidad | Puerto | Se comunica con |
 |---|---|---|---|
 | **Home** | Vista web estática (Nginx). Punto de entrada del usuario. | `8080` | — |
-| **Mediciones** | Recibir y almacenar lecturas (simuladas) y permitir consultarlas por sensor. API Flask. | `5001` | Monitoreo, Simulador |
+| **Mediciones** | Recibir y almacenar lecturas (simuladas) en MySQL y permitir consultarlas por sensor. API Flask. | `5001` | Monitoreo, Simulador, MySQL |
+| **MySQL** | Persistencia de mediciones. Solo Mediciones se conecta. | `3307` (host) | Mediciones |
 | **Monitoreo** | Consultar las mediciones de un sensor y calcular un resumen (cantidad, promedio, última lectura). API Flask. | `5002` | Mediciones |
 | **Simulador** | Generar valores de temperatura y humedad para un catálogo fijo de sensores y enviarlos periódicamente a Mediciones. Proceso, no expone API. | — | Mediciones |
 
@@ -102,6 +104,7 @@ Servicios expuestos:
 - Home: <http://localhost:8080>
 - Mediciones (API): <http://localhost:5001>
 - Monitoreo (API): <http://localhost:5002>
+- MySQL: `localhost:3307` (usuario y clave en `.env`)
 
 Ejemplos de prueba:
 
@@ -122,20 +125,19 @@ docker compose down
 **Diseñado**
 - Reglas de alerta por umbrales.
 - Servicio de Notificaciones.
-- Modelo de datos relacional (PostgreSQL) para persistencia.
 
 **Configurado**
-- `docker-compose.yml` con los cuatro componentes (home, mediciones, monitoreo, simulador).
+- `docker-compose.yml` con home, mediciones, monitoreo, simulador y mysql.
+- Volumen `mysql_data` y script `mediciones/init.sql` para crear la tabla.
 - CI en GitHub Actions que valida `docker-compose.yml` en cada Pull Request.
 
 **Implementado**
-- API REST de Mediciones (Flask, puerto 5001).
+- API REST de Mediciones (Flask, puerto 5001) con persistencia en MySQL.
 - API REST de Monitoreo (Flask, puerto 5002), que consume Mediciones.
 - Simulador que envía lecturas de temperatura y humedad cada 5 s.
 - Vista Home servida con Nginx dentro de un contenedor.
 
 **Pendiente**
-- Persistencia en base de datos (hoy las mediciones se guardan en memoria y se pierden al reiniciar).
 - Lógica de alertas en Monitoreo y servicio de Notificaciones.
 - Conexión de la Home con los servicios para mostrar datos reales.
 - Autenticación, seguridad y despliegue en la nube (fuera del alcance de este avance).
@@ -145,7 +147,7 @@ docker compose down
 ```
 .
 ├── home/            # vista Home (HTML/CSS/JS) + Dockerfile (Nginx)
-├── mediciones/      # microservicio Mediciones (Flask) + Dockerfile
+├── mediciones/      # microservicio Mediciones (Flask) + Dockerfile + init.sql
 ├── monitoreo/       # microservicio Monitoreo (Flask) + Dockerfile
 ├── simulador/       # generador de datos simulados + Dockerfile
 ├── docs/
