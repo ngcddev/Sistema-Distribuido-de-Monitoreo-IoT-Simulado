@@ -1,4 +1,4 @@
-# Sistema Distribuido de Monitoreo IoT (Simulado) — AgroSense
+# AgroSense — Sistema Distribuido de Monitoreo IoT (Simulado)
 
 ## Problema que resuelve
 
@@ -8,15 +8,15 @@ humedad, calidad del agua, estado del suelo y calidad del aire. La falta de dato
 digitalizados y actualizados dificulta la toma de decisiones en actividades como la
 agricultura, la investigación ambiental y el cuidado de los recursos naturales.
 
-El sistema resuelve esto mediante una red de sensores IoT **simulada** que recolecta,
-transmite y centraliza datos ambientales, facilitando su consulta y análisis, y
-sentando la base para la generación de alertas cuando los valores salen de rango.
+El sistema resuelve esto mediante una red de sensores IoT **simulada** que genera,
+transmite y centraliza datos ambientales, facilita su consulta y análisis, y genera
+alertas cuando los valores salen de los umbrales configurados.
 
 ## Objetivo
 
-Diseñar y comenzar a materializar, mediante contenedores, una solución distribuida
-basada en microservicios que reciba, almacene y analice mediciones de sensores
-simulados, con una vista Home como punto de entrada del usuario.
+Diseñar y materializar, mediante contenedores, una solución distribuida basada en
+microservicios que reciba, almacene y analice mediciones de sensores simulados, con una
+vista Home como punto de entrada del usuario.
 
 ## Integrantes y roles
 
@@ -27,130 +27,159 @@ simulados, con una vista Home como punto de entrada del usuario.
 | Sebastián Paja | Dockerfiles y contenerización de los servicios |
 | Freyder Pacho | Vista Home y documentación |
 
-> El proyecto se construye de forma colaborativa; cada integrante tiene una
-> responsabilidad principal pero participa en la revisión del trabajo del resto.
-
 ## Arquitectura
 
-Se usa una **arquitectura de microservicios** sobre un estilo **cliente–servidor**:
-el usuario accede desde el navegador a la vista Home, y cada responsabilidad del
-sistema (almacenar mediciones, calcular resúmenes, generar datos) vive en un servicio
-independiente que se comunica por **HTTP/REST con JSON**.
+Arquitectura de **microservicios** con estilo cliente–servidor. Cada servicio con
+persistencia tiene su **propia base MySQL**; los servicios se comunican por
+**HTTP/REST con JSON** dentro de la red `red_iot` de Docker Compose. El usuario entra
+por Home (Nginx), que sirve la interfaz y actúa como proxy hacia las APIs.
 
 ```mermaid
 flowchart TD
-    U[Usuario] --> H[Home]
-    H --> M[Mediciones]
-    H --> MO[Monitoreo]
-    MO -- consulta lecturas --> M
-    SIM[Simulador] -- POST medicion --> M
+    U[Usuario / Navegador] --> H["Home (Nginx :8080)"]
+    H -- "/mediciones" --> M["Mediciones :5001"]
+    H -- "/monitoreo" --> MO["Monitoreo :5002"]
+    MO -- "GET /mediciones" --> M
+    MO -- "GET /sensores/id" --> S["Sensores :5003"]
+    SIM[Simulador] -- "GET /sensores" --> S
+    SIM -- "POST /mediciones" --> M
+    M --> DBM[("mysql_mediciones")]
+    S --> DBS[("mysql_sensores")]
+    MO --> DBMO[("mysql_monitoreo")]
 ```
 
-El detalle completo (componentes, decisiones y pendientes) está en
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-### Cambio respecto al diseño inicial
-
-Se **descartó el servicio de Sensores** para este avance. El catálogo de sensores se
-maneja como una lista fija dentro del Simulador; un servicio de Sensores independiente
-se evaluará más adelante si la gestión de dispositivos lo justifica.
+Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHITECTURE.md).
 
 ## Servicios
 
-| Servicio | Responsabilidad | Puerto | Se comunica con |
-|---|---|---|---|
-| **Home** | Vista web estática (Nginx). Punto de entrada del usuario. | `8080` | — |
-| **Mediciones** | Recibir y almacenar lecturas (simuladas) y permitir consultarlas por sensor. API Flask. | `5001` | Monitoreo, Simulador |
-| **Monitoreo** | Consultar las mediciones de un sensor y calcular un resumen (cantidad, promedio, última lectura). API Flask. | `5002` | Mediciones |
-| **Simulador** | Generar valores de temperatura y humedad para un catálogo fijo de sensores y enviarlos periódicamente a Mediciones. Proceso, no expone API. | — | Mediciones |
+| Servicio | Responsabilidad | Puerto | Se comunica con | Documentación |
+|---|---|---|---|---|
+| **Home** | Interfaz web (Nginx) y proxy hacia `/mediciones` y `/monitoreo` | `8080` → 80 | Mediciones, Monitoreo | [servicio-4-home](docs/servicios/servicio-4-home.md) |
+| **Mediciones** | Registrar y consultar lecturas | `5001` | MySQL propio | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
+| **Monitoreo** | Resúmenes, umbrales y alertas | `5002` | Mediciones, Sensores, MySQL propio | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
+| **Sensores** | Catálogo de sensores | `5003` | MySQL propio | [servicio-sensores](docs/servicios/servicio-sensores.md) |
+| **Simulador** | Generar lecturas y enviarlas a Mediciones (sin API) | — | Sensores, Mediciones | [servicio-3-simulador](docs/servicios/servicio-3-simulador.md) |
 
-Documentación detallada de cada servicio:
+## Endpoints
 
-- [Servicio de Mediciones](docs/servicios/servicio-1-mediciones.md)
-- [Servicio de Monitoreo](docs/servicios/servicio-2-monitoreo.md)
-- [Servicio Simulador](docs/servicios/servicio-3-simulador.md)
-- [Servicio Home](docs/servicios/servicio-4-home.md)
+### Mediciones (`:5001`)
 
-## Comunicación entre servicios
-
-| Quién solicita | A quién | Qué información | Método HTTP |
-|---|---|---|---|
-| Monitoreo | Mediciones | Últimas lecturas de un sensor | `GET /mediciones?sensor_id=X` |
-| Simulador | Mediciones | Registrar una nueva lectura | `POST /mediciones` |
-
-## Docker
-
-Todos los componentes están contenerizados:
-
-| Componente | Imagen base | Dockerfile |
+| Método | Ruta | Descripción |
 |---|---|---|
-| Home | `nginx:alpine` | `home/Dockerfile` |
-| Mediciones | `python:3.12-slim` | `mediciones/Dockerfile` |
-| Monitoreo | `python:3.12-slim` | `monitoreo/Dockerfile` |
-| Simulador | `python:3.12-slim` | `simulador/Dockerfile` |
+| GET | `/health` | Estado del servicio y de la BD |
+| POST | `/mediciones` | Registrar una medición |
+| GET | `/mediciones` | Listar (filtros `sensor_id`, `id`, `limit`) |
+| GET | `/mediciones/<id>` | Obtener una medición |
+| GET | `/mediciones/sensor/<sensor_id>` | Mediciones de un sensor |
+| PUT / PATCH | `/mediciones/<id>` | Reemplazar / actualizar parcialmente |
+| DELETE | `/mediciones/<id>` | Eliminar |
 
-## Docker Compose
+### Sensores (`:5003`)
 
-Levantar todo el sistema:
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/health` | Estado del servicio y de la BD |
+| GET | `/sensores` | Listar (filtros `tipo`, `activo`) |
+| GET | `/sensores/<id>` | Obtener un sensor |
+| POST | `/sensores` | Crear |
+| PUT | `/sensores/<id>` | Reemplazar |
+| DELETE | `/sensores/<id>` | Eliminar |
+
+### Monitoreo (`:5002`)
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/health` | Estado del servicio y de la BD |
+| GET | `/monitoreo/<sensor_id>` | Resumen del sensor (`404` si no hay lecturas) |
+| GET | `/monitoreo/resumen-general` | Métricas globales |
+| GET | `/monitoreo/evaluar/<sensor_id>` | Evalúa la última lectura contra su umbral y registra alerta |
+| GET / POST | `/monitoreo/umbrales` | Listar / crear umbrales |
+| GET / PUT / DELETE | `/monitoreo/umbrales/<id>` | Obtener / reemplazar / eliminar un umbral |
+| GET | `/monitoreo/alertas` | Listar alertas (filtros `sensor_id`, `limit`) |
+| DELETE | `/monitoreo/alertas/<id>` | Eliminar una alerta |
+
+## Bases de datos
+
+Tres instancias MySQL 8.0 independientes, cada una con su volumen. Los servicios crean
+su base y sus tablas al arrancar (requieren un usuario con `CREATE`; `root` sirve).
+Scripts de referencia en [bases_datos/](bases_datos/).
+
+| Servicio | Contenedor | Base | Tablas |
+|---|---|---|---|
+| Mediciones | `mysql_mediciones` | `mediciones` | `mediciones` |
+| Sensores | `mysql_sensores` | `sensores` | `sensores` |
+| Monitoreo | `mysql_monitoreo` | `monitoreo` | `umbrales`, `alertas` |
+
+## Variables de entorno
+
+Se definen en `.env` (copiar de [.env.example](.env.example)). Todas tienen valor por
+defecto en `docker-compose.yml`, por lo que `.env` es opcional.
+
+| Variable | Uso | Por defecto |
+|---|---|---|
+| `MYSQL_ROOT_PASSWORD` | Contraseña root de los tres MySQL | `root` |
+| `DB_USER` | Usuario con el que los servicios se conectan | `root` |
+| `DB_PASSWORD` | Contraseña de ese usuario (igual a `MYSQL_ROOT_PASSWORD` si es `root`) | `root` |
+| `DB_PORT` | Puerto de MySQL | `3306` |
+| `INTERVALO_SEGUNDOS` | Segundos entre envíos del Simulador | `5` |
+
+Compose fija además, por servicio: `DB_HOST` (`mysql_mediciones`, `mysql_sensores`,
+`mysql_monitoreo`), `DB_NAME` (`mediciones`, `sensores`, `monitoreo`),
+`MEDICIONES_URL=http://mediciones:5001` y `SENSORES_URL=http://sensores:5003`.
+
+## Cómo ejecutar
+
+Requisitos: Docker y Docker Compose.
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
 Servicios expuestos:
 
 - Home: <http://localhost:8080>
-- Mediciones (API): <http://localhost:5001>
-- Monitoreo (API): <http://localhost:5002>
+- Mediciones: <http://localhost:5001>
+- Monitoreo: <http://localhost:5002>
+- Sensores: <http://localhost:5003>
 
-Ejemplos de prueba:
+Pruebas rápidas:
 
 ```bash
-curl http://localhost:5001/health
-curl http://localhost:5001/mediciones
-curl http://localhost:5002/monitoreo/1
+curl localhost:5001/health localhost:5002/health localhost:5003/health
+curl localhost:5003/sensores
+curl localhost:5001/mediciones
+curl localhost:5002/monitoreo/evaluar/1
 ```
 
-Apagar:
+Apagar (con `-v` también borra los datos de las bases):
 
 ```bash
 docker compose down
+docker compose down -v
 ```
 
-## Estado actual
+## Integración continua
 
-**Diseñado**
-- Reglas de alerta por umbrales.
-- Servicio de Notificaciones.
-- Modelo de datos relacional (PostgreSQL) para persistencia.
-
-**Configurado**
-- `docker-compose.yml` con los cuatro componentes (home, mediciones, monitoreo, simulador).
-- CI en GitHub Actions que valida `docker-compose.yml` en cada Pull Request.
-
-**Implementado**
-- API REST de Mediciones (Flask, puerto 5001).
-- API REST de Monitoreo (Flask, puerto 5002), que consume Mediciones.
-- Simulador que envía lecturas de temperatura y humedad cada 5 s.
-- Vista Home servida con Nginx dentro de un contenedor.
-
-**Pendiente**
-- Persistencia en base de datos (hoy las mediciones se guardan en memoria y se pierden al reiniciar).
-- Lógica de alertas en Monitoreo y servicio de Notificaciones.
-- Conexión de la Home con los servicios para mostrar datos reales.
-- Autenticación, seguridad y despliegue en la nube (fuera del alcance de este avance).
+El workflow de GitHub Actions valida `docker-compose.yml` (`docker compose config -q`)
+en cada Pull Request hacia `main`.
 
 ## Estructura del repositorio
 
 ```
 .
-├── home/            # vista Home (HTML/CSS/JS) + Dockerfile (Nginx)
-├── mediciones/      # microservicio Mediciones (Flask) + Dockerfile
-├── monitoreo/       # microservicio Monitoreo (Flask) + Dockerfile
-├── simulador/       # generador de datos simulados + Dockerfile
-├── docs/
-│   ├── ARCHITECTURE.md
-│   └── servicios/   # documentación por servicio
+├── home/            # Interfaz (HTML/CSS/JS) + nginx.conf + Dockerfile
+├── mediciones/      # Microservicio Mediciones (Flask)
+├── sensores/        # Microservicio Sensores (Flask)
+├── monitoreo/       # Microservicio Monitoreo (Flask)
+├── simulador/       # Generador de datos simulados
+├── bases_datos/     # Scripts SQL de referencia
+├── docs/            # Arquitectura y documentación por servicio
 ├── docker-compose.yml
-└── README.md
+└── .env.example
 ```
+
+## Pendiente
+
+- Servicio de Notificaciones que consuma las alertas.
+- Autenticación, seguridad y despliegue en la nube.
