@@ -1,5 +1,118 @@
 services:
 
+  mysql_mediciones:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - mysql_mediciones_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - red_iot
+
+  mysql_sensores:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - mysql_sensores_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - red_iot
+
+  mysql_monitoreo:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+    volumes:
+      - mysql_monitoreo_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks:
+      - red_iot
+
+  mediciones:
+    build: ./mediciones
+    ports:
+      - "5001:5001"
+    environment:
+      DB_HOST: mysql_mediciones
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_NAME: mediciones
+    depends_on:
+      mysql_mediciones:
+        condition: service_healthy
+    networks:
+      - red_iot
+
+  sensores:
+    build: ./sensores
+    ports:
+      - "5003:5003"
+    environment:
+      DB_HOST: mysql_sensores
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_NAME: sensores
+    depends_on:
+      mysql_sensores:
+        condition: service_healthy
+    networks:
+      - red_iot
+
+  monitoreo:
+    build: ./monitoreo
+    ports:
+      - "5002:5002"
+    environment:
+      DB_HOST: mysql_monitoreo
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_NAME: monitoreo
+      MEDICIONES_URL: http://mediciones:5001
+      SENSORES_URL: http://sensores:5003
+    depends_on:
+      mysql_monitoreo:
+        condition: service_healthy
+      mediciones:
+        condition: service_started
+      sensores:
+        condition: service_started
+    networks:
+      - red_iot
+
+  simulador:
+    build: ./simulador
+    environment:
+      MEDICIONES_URL: http://mediciones:5001
+      SENSORES_URL: http://sensores:5003
+      INTERVALO_SEGUNDOS: ${INTERVALO_SEGUNDOS:-5}
+    depends_on:
+      mediciones:
+        condition: service_started
+      sensores:
+        condition: service_started
+    networks:
+      - red_iot
+
   home:
     build: ./home
     ports:
@@ -7,25 +120,14 @@ services:
     depends_on:
       - mediciones
       - monitoreo
+    networks:
+      - red_iot
 
-  mediciones:
-    build: ./mediciones
-    ports:
-      - "5001:5001"
+volumes:
+  mysql_mediciones_data:
+  mysql_sensores_data:
+  mysql_monitoreo_data:
 
-  monitoreo:
-    build: ./monitoreo
-    ports:
-      - "5002:5002"
-    environment:
-      - MEDICIONES_URL=http://mediciones:5001
-    depends_on:
-      - mediciones
-
-  simulador:
-    build: ./simulador
-    environment:
-      - MEDICIONES_URL=http://mediciones:5001
-      - INTERVALO_SEGUNDOS=5
-    depends_on:
-      - mediciones
+networks:
+  red_iot:
+    driver: bridge
