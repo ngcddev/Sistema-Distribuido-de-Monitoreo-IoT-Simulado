@@ -2,89 +2,72 @@
 
 ## Resumen
 
-Servicio HTTP que consulta las mediciones de un sensor y genera un resumen con su cantidad de lecturas, promedio y medición más reciente.
-
-## Responsabilidades
-
-- Verificar la disponibilidad del servicio.
-- Consultar el servicio de Mediciones.
-- Calcular el promedio de los valores recibidos.
-- Identificar la lectura más reciente.
-- Devolver respuestas controladas cuando Mediciones no está disponible.
+API REST (Flask) que analiza las mediciones: calcula resúmenes por sensor y globales, administra los umbrales por tipo de sensor, evalúa la última lectura contra su umbral y registra alertas. Persiste umbrales y alertas en MySQL.
 
 ## Información técnica
 
 | Elemento | Valor |
 |---|---|
-| Código | `monitoreo/app.py` |
+| Código | `monitoreo/app.py`, `monitoreo/database.py` |
 | Framework | Flask |
 | Puerto | `5002` |
 | Contenedor Compose | `monitoreo` |
-| Dependencia | Servicio de Mediciones |
+| Base de datos | `monitoreo` en el contenedor `mysql_monitoreo` |
 
-## Configuración
+## Endpoints
 
-`MEDICIONES_URL` define la dirección base del servicio de Mediciones.
+| Método | Ruta | Descripción | Respuestas |
+|---|---|---|---|
+| GET | `/health` | Comprueba el servicio y la conexión a la BD | `200`, `503` |
+| GET | `/monitoreo/<sensor_id>` | Resumen del sensor: cantidad, promedio y última lectura | `200`, `404` si no hay lecturas, `503` |
+| GET | `/monitoreo/resumen-general` | Total de lecturas, sensores activos, listado y promedio global | `200`, `503` |
+| GET | `/monitoreo/evaluar/<sensor_id>` | Compara la última lectura con el umbral de su tipo; si está fuera de rango registra una alerta | `200`, `404`, `503` |
+| GET | `/monitoreo/umbrales` | Lista los umbrales | `200` |
+| GET | `/monitoreo/umbrales/<id>` | Obtiene un umbral | `200`, `404` |
+| POST | `/monitoreo/umbrales` | Crea un umbral (`tipo`, `minimo`, `maximo`, `unidad` opcional) | `201`, `400`, `409` |
+| PUT | `/monitoreo/umbrales/<id>` | Reemplaza un umbral | `200`, `400`, `404` |
+| DELETE | `/monitoreo/umbrales/<id>` | Elimina un umbral | `200`, `404` |
+| GET | `/monitoreo/alertas` | Lista alertas. Filtros: `sensor_id`, `limit` (por defecto 50, máx. 500) | `200`, `400` |
+| DELETE | `/monitoreo/alertas/<id>` | Elimina una alerta | `200`, `404` |
 
-**Docker Compose:**
+`/monitoreo/evaluar/<sensor_id>` devuelve `evaluacion` = `NORMAL`, `ALERTA_CRITICA` o `SIN_UMBRAL`. El tipo del sensor se obtiene del servicio Sensores; si no responde, se deduce de la unidad (`C` → temperatura, `%` → humedad). Se guarda una sola alerta por medición. Si Mediciones no está disponible, responde `503`.
 
-```text
-MEDICIONES_URL=http://mediciones:5001
-```
+## Cambio de contrato
 
-**Ejecución local recomendada:**
+`GET /monitoreo/<sensor_id>` devuelve **`404`** cuando el sensor no tiene lecturas.
 
-```text
-MEDICIONES_URL=http://localhost:5001
-```
+## Base de datos
 
-Para ejecutar el servicio localmente:
+| Base | Tabla | Columnas |
+|---|---|---|
+| `monitoreo` | `umbrales` | `id` (PK), `tipo` VARCHAR(30) único, `minimo` DOUBLE, `maximo` DOUBLE, `unidad` VARCHAR(10) |
+| `monitoreo` | `alertas` | `id` (PK), `medicion_id` INT único, `sensor_id` VARCHAR(50), `tipo`, `valor` DOUBLE, `estado`, `detalle`, `timestamp` |
+
+Umbrales iniciales: temperatura 10–35 °C y humedad 30–80 %. Script de referencia: [`bases_datos/monitoreo.sql`](../../bases_datos/monitoreo.sql).
+
+## Variables de entorno
+
+| Variable | Descripción | Valor en Compose |
+|---|---|---|
+| `DB_HOST` | Host de MySQL | `mysql_monitoreo` |
+| `DB_PORT` | Puerto de MySQL | `3306` |
+| `DB_USER` | Usuario de MySQL (necesita `CREATE`) | `root` |
+| `DB_PASSWORD` | Contraseña de MySQL | `root` |
+| `DB_NAME` | Nombre de la base | `monitoreo` |
+| `MEDICIONES_URL` | URL del servicio Mediciones | `http://mediciones:5001` |
+| `SENSORES_URL` | URL del servicio Sensores | `http://sensores:5003` |
+
+## Comunicación
+
+| Solicita | Responde | Endpoint | Enviado | Recibido |
+|---|---|---|---|---|
+| Monitoreo | Mediciones | `GET /mediciones?sensor_id=X&limit=N` | `sensor_id`, `limit` | Lista de mediciones |
+| Monitoreo | Sensores | `GET /sensores/<id>` | `id` del sensor | Sensor con su `tipo` |
+| Home (Nginx) | Monitoreo | `/monitoreo/...` | Petición del navegador | JSON de la API |
+
+## Ejecución
 
 ```bash
-python monitoreo/app.py
+docker compose up --build monitoreo
+curl http://localhost:5002/monitoreo/evaluar/1
 ```
-
-## API
-
-### `GET /health`
-
-Comprueba que el servicio está disponible.
-
-**Respuesta `200`:**
-
-```json
-{"status": "ok"}
-```
-
-### `GET /monitoreo/<sensor_id>`
-
-Consulta `GET /mediciones?sensor_id=<sensor_id>` y devuelve un resumen.
-
-**Respuesta con lecturas:**
-
-```json
-{
-  "sensor_id": "1",
-  "cantidad_lecturas": 2,
-  "promedio": 26.75,
-  "ultima_lectura": {
-    "sensor_id": "1",
-    "valor": 27.5,
-    "timestamp": "2026-09-07T00:00:00+00:00"
-  }
-}
-```
-
-Cuando no hay lecturas, responde `200` con `cantidad_lecturas` igual a `0` y los campos `promedio` y `ultima_lectura` en `null`.
-
-Si Mediciones no responde, se agota el tiempo de espera o devuelve un estado distinto de `200`, Monitoreo responde con `503`.
-
-## Reglas de cálculo
-
-- `cantidad_lecturas`: número de lecturas recibidas.
-- `promedio`: media aritmética de `valor`, redondeada a dos decimales.
-- `ultima_lectura`: lectura cuyo `timestamp` sea más reciente.
-
-## Estado y pendientes
-
-El servicio calcula resúmenes, pero todavía no implementa reglas de alerta ni persistencia propia. La configuración predeterminada del código agrega `/mediciones` a `MEDICIONES_URL`; por eso, al ejecutar localmente debe definirse la variable con la URL base indicada arriba para evitar duplicar la ruta.
