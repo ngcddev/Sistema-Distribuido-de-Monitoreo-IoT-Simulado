@@ -41,6 +41,9 @@ flowchart TD
     H -- "/monitoreo" --> MO["Monitoreo :5002"]
     MO -- "GET /mediciones" --> M
     MO -- "GET /sensores/id" --> S["Sensores :5003"]
+    EV[Evaluador] -- "GET /mediciones?desde_id" --> M
+    EV -- "GET /sensores/id" --> S
+    EV --> DBMO
     SIM[Simulador] -- "GET /sensores" --> S
     SIM -- "POST /mediciones" --> M
     M --> DBM[("mysql_mediciones")]
@@ -58,6 +61,7 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 | **Mediciones** | Registrar y consultar lecturas | `5001` | MySQL propio | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
 | **Monitoreo** | Resúmenes, umbrales y alertas | `5002` | Mediciones, Sensores, MySQL propio | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
 | **Sensores** | Catálogo de sensores | `5003` | MySQL propio | [servicio-sensores](docs/servicios/servicio-sensores.md) |
+| **Evaluador** | Evaluar automáticamente las lecturas nuevas y registrar alertas (mismo código que Monitoreo, sin API) | — | Mediciones, Sensores, MySQL de Monitoreo | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
 | **Simulador** | Generar lecturas y enviarlas a Mediciones (sin API) | — | Sensores, Mediciones | [servicio-3-simulador](docs/servicios/servicio-3-simulador.md) |
 
 ## Endpoints
@@ -68,9 +72,10 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 |---|---|---|
 | GET | `/health` | Estado del servicio y de la BD |
 | POST | `/mediciones` | Registrar una medición |
-| GET | `/mediciones` | Listar (filtros `sensor_id`, `id`, `limit`) |
+| GET | `/mediciones` | Las N más recientes (por defecto 100, máx. 1000; la cabecera `X-Limite` indica el límite aplicado). Filtros `sensor_id`, `id`, `limit`, `desde_id` |
+| GET | `/mediciones/estadisticas` | Total, sensores con lecturas y promedio por unidad (SQL). Filtro `sensor_id` (añade `promedio` del sensor) |
 | GET | `/mediciones/<id>` | Obtener una medición |
-| GET | `/mediciones/sensor/<sensor_id>` | Mediciones de un sensor |
+| GET | `/mediciones/sensor/<sensor_id>` | Últimas mediciones de un sensor (acepta `limit`) |
 | PUT / PATCH | `/mediciones/<id>` | Reemplazar / actualizar parcialmente |
 | DELETE | `/mediciones/<id>` | Eliminar |
 
@@ -91,8 +96,8 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 |---|---|---|
 | GET | `/health` | Estado del servicio y de la BD |
 | GET | `/monitoreo/<sensor_id>` | Resumen del sensor (`404` si no hay lecturas) |
-| GET | `/monitoreo/resumen-general` | Métricas globales |
-| GET | `/monitoreo/evaluar/<sensor_id>` | Evalúa la última lectura contra su umbral y registra alerta |
+| GET | `/monitoreo/resumen-general` | Métricas globales (total, sensores y promedio por unidad) |
+| GET / POST | `/monitoreo/evaluar/<sensor_id>` | Evalúa la última lectura contra su umbral. `GET` solo consulta; `POST` además registra la alerta |
 | GET / POST | `/monitoreo/umbrales` | Listar / crear umbrales |
 | GET / PUT / DELETE | `/monitoreo/umbrales/<id>` | Obtener / reemplazar / eliminar un umbral |
 | GET | `/monitoreo/alertas` | Listar alertas (filtros `sensor_id`, `limit`) |
@@ -100,9 +105,10 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 
 ## Bases de datos
 
-Tres instancias MySQL 8.0 independientes, cada una con su volumen. Los servicios crean
-su base y sus tablas al arrancar (requieren un usuario con `CREATE`; `root` sirve).
-Scripts de referencia en [bases_datos/](bases_datos/).
+Tres instancias MySQL 8.0 independientes, cada una con su volumen. MySQL crea en cada
+una la base del servicio y un usuario (`DB_USER`) con permisos **solo sobre esa base**; los
+servicios no usan `root`. Los servicios crean sus tablas al arrancar. Scripts de
+referencia en [bases_datos/](bases_datos/).
 
 | Servicio | Contenedor | Base | Tablas |
 |---|---|---|---|
@@ -112,16 +118,16 @@ Scripts de referencia en [bases_datos/](bases_datos/).
 
 ## Variables de entorno
 
-Se definen en `.env` (copiar de [.env.example](.env.example)). Todas tienen valor por
-defecto en `docker-compose.yml`, por lo que `.env` es opcional.
+Se definen en `.env` (copiar de [.env.example](.env.example)). **`.env` es obligatorio**:
+Compose se detiene con un mensaje claro si faltan `MYSQL_ROOT_PASSWORD`, `DB_USER` o `DB_PASSWORD`.
 
 | Variable | Uso | Por defecto |
 |---|---|---|
-| `MYSQL_ROOT_PASSWORD` | Contraseña root de los tres MySQL | `root` |
-| `DB_USER` | Usuario con el que los servicios se conectan | `root` |
-| `DB_PASSWORD` | Contraseña de ese usuario (igual a `MYSQL_ROOT_PASSWORD` si es `root`) | `root` |
-| `DB_PORT` | Puerto de MySQL | `3306` |
+| `MYSQL_ROOT_PASSWORD` | Contraseña root de los tres MySQL (solo la usa MySQL) | obligatoria |
+| `DB_USER` | Usuario de los servicios (no puede ser `root`) | obligatoria |
+| `DB_PASSWORD` | Contraseña de ese usuario | obligatoria |
 | `INTERVALO_SEGUNDOS` | Segundos entre envíos del Simulador | `5` |
+| `INTERVALO_EVALUACION_SEGUNDOS` | Segundos entre ciclos del Evaluador | `10` |
 
 Compose fija además, por servicio: `DB_HOST` (`mysql_mediciones`, `mysql_sensores`,
 `mysql_monitoreo`), `DB_NAME` (`mediciones`, `sensores`, `monitoreo`),
@@ -136,21 +142,33 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Servicios expuestos:
+Por defecto solo se publica **Home** (<http://localhost:8080>). Las APIs quedan en la red
+interna de Compose y se alcanzan a través del proxy de Home (`/mediciones`, `/monitoreo`).
 
-- Home: <http://localhost:8080>
+Para desarrollo, publica también los puertos de las APIs:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
 - Mediciones: <http://localhost:5001>
 - Monitoreo: <http://localhost:5002>
 - Sensores: <http://localhost:5003>
 
-Pruebas rápidas:
+Pruebas rápidas (con el archivo de desarrollo):
 
 ```bash
 curl localhost:5001/health localhost:5002/health localhost:5003/health
 curl localhost:5003/sensores
 curl localhost:5001/mediciones
-curl localhost:5002/monitoreo/evaluar/1
+curl -X POST localhost:5002/monitoreo/evaluar/1
 ```
+
+### Cambiar credenciales
+
+`MYSQL_USER` y `MYSQL_PASSWORD` solo se aplican cuando el volumen de MySQL está vacío. Si ya
+levantaste el sistema antes (por ejemplo con `root`/`root`), debes recrear los volúmenes
+con `docker compose down -v`, lo que **borra los datos**.
 
 Apagar (con `-v` también borra los datos de las bases):
 
@@ -161,8 +179,14 @@ docker compose down -v
 
 ## Integración continua
 
-El workflow de GitHub Actions valida `docker-compose.yml` (`docker compose config -q`)
-en cada Pull Request hacia `main`.
+El workflow de GitHub Actions, en cada Pull Request hacia `main`:
+
+1. Ejecuta las pruebas de `mediciones`, `monitoreo` y `sensores` (`pytest`).
+2. Levanta el stack completo con `docker compose up --wait` (respeta los healthchecks) y
+   ejecuta una prueba de humo contra las APIs y el proxy de Home.
+
+Pruebas en local: `pip install -r <servicio>/requirements.txt -r requirements-dev.txt` y luego
+`cd <servicio> && python -m pytest`.
 
 ## Estructura del repositorio
 
@@ -175,7 +199,9 @@ en cada Pull Request hacia `main`.
 ├── simulador/       # Generador de datos simulados
 ├── bases_datos/     # Scripts SQL de referencia
 ├── docs/            # Arquitectura y documentación por servicio
-├── docker-compose.yml
+├── docker-compose.yml       # Stack (solo publica Home)
+├── docker-compose.dev.yml   # Publica los puertos de las APIs (desarrollo)
+├── requirements-dev.txt     # Dependencias de las pruebas
 └── .env.example
 ```
 

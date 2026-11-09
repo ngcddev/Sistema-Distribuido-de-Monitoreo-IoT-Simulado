@@ -1,3 +1,4 @@
+import sys
 from contextlib import contextmanager
 
 import mysql.connector
@@ -163,5 +164,7 @@ def eliminar_sensor(sensor_id):
 
 
 if __name__ == '__main__':
-    inicializar()
+    # Solo para desarrollo local; en el contenedor se ejecuta con gunicorn (ver gunicorn_conf.py).
+    if not inicializar():
+        sys.exit('[sensores] no se pudo preparar la base de datos')
     app.run(host='0.0.0.0', port=5003)

@@ -1,82 +1,154 @@
+# Solo Home (8080) queda publicado. Las APIs y las bases viven en la red interna de Compose.
+# Para exponer los puertos de las APIs en desarrollo: docker-compose.dev.yml (ver README).
+
+x-mysql: &mysql
+  image: mysql:8.0
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+    interval: 5s
+    timeout: 3s
+    retries: 10
+    start_period: 20s
+
+x-api-env: &api-env
+  DB_USER: ${DB_USER:?Define DB_USER en .env (copiar de .env.example)}
+  DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env (copiar de .env.example)}
+
 services:
 
   mysql_mediciones:
-    image: mysql:8.0
+    <<: *mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: mediciones
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_mediciones_data:/var/lib/mysql
 
   mysql_sensores:
-    image: mysql:8.0
+    <<: *mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: sensores
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_sensores_data:/var/lib/mysql
 
   mysql_monitoreo:
-    image: mysql:8.0
+    <<: *mysql
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
+      MYSQL_DATABASE: monitoreo
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - mysql_monitoreo_data:/var/lib/mysql
 
   mediciones:
     build: ./mediciones
-    ports:
-      - "5001:5001"
+    restart: unless-stopped
     environment:
+      <<: *api-env
       DB_HOST: mysql_mediciones
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: mediciones
     depends_on:
-      - mysql_mediciones
+      mysql_mediciones:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   sensores:
     build: ./sensores
-    ports:
-      - "5003:5003"
+    restart: unless-stopped
     environment:
+      <<: *api-env
       DB_HOST: mysql_sensores
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: sensores
     depends_on:
-      - mysql_sensores
+      mysql_sensores:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 
   monitoreo:
     build: ./monitoreo
-    ports:
-      - "5002:5002"
+    restart: unless-stopped
     environment:
+      <<: *api-env
       DB_HOST: mysql_monitoreo
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: monitoreo
       MEDICIONES_URL: http://mediciones:5001
       SENSORES_URL: http://sensores:5003
     depends_on:
-      - mysql_monitoreo
-      - mediciones
-      - sensores
+      mysql_monitoreo:
+        condition: service_healthy
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # Evalúa automáticamente las lecturas nuevas y registra las alertas (misma imagen que monitoreo).
+  evaluador:
+    build: ./monitoreo
+    command: ["python", "worker.py"]
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      DB_HOST: mysql_monitoreo
+      DB_NAME: monitoreo
+      MEDICIONES_URL: http://mediciones:5001
+      SENSORES_URL: http://sensores:5003
+      INTERVALO_EVALUACION_SEGUNDOS: ${INTERVALO_EVALUACION_SEGUNDOS:-10}
+    depends_on:
+      monitoreo:
+        condition: service_healthy
 
   simulador:
     build: ./simulador
+    restart: unless-stopped
     environment:
       MEDICIONES_URL: http://mediciones:5001
       SENSORES_URL: http://sensores:5003
+      INTERVALO_SEGUNDOS: ${INTERVALO_SEGUNDOS:-5}
     depends_on:
-      - mediciones
-      - sensores
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
 
   home:
     build: ./home
+    restart: unless-stopped
     ports:
       - "8080:80"
     depends_on:
-      - mediciones
-      - monitoreo
+      mediciones:
+        condition: service_healthy
+      monitoreo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 volumes:
   mysql_mediciones_data:

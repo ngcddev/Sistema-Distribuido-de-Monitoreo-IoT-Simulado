@@ -1,6 +1,8 @@
 import os
-import time
 import random
+import sys
+import time
+
 import requests
 
 MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001')
@@ -75,7 +77,7 @@ def main():
 
     if not esperar_servicio(MEDICIONES_URL, "mediciones"):
         print("[simulador] no se pudo conectar con mediciones, abortando")
-        return
+        sys.exit(1)  # código distinto de 0: Docker lo reinicia (restart: unless-stopped)
 
     print(f"[simulador] generando datos cada {INTERVALO_SEGUNDOS}s")
 

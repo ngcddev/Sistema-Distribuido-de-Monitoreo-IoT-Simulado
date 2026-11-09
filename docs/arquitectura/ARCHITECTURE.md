@@ -18,6 +18,9 @@ flowchart TD
     H -- "/monitoreo" --> MO["Monitoreo :5002"]
     MO -- "GET /mediciones" --> M
     MO -- "GET /sensores/id" --> S["Sensores :5003"]
+    EV[Evaluador] -- "GET /mediciones?desde_id" --> M
+    EV -- "GET /sensores/id" --> S
+    EV --> DBMO
     SIM[Simulador] -- "GET /sensores" --> S
     SIM -- "POST /mediciones" --> M
     M --> DBM[("mysql_mediciones")]
@@ -33,10 +36,12 @@ flowchart TD
 | Mediciones | Microservicio Flask | 5001 | `mediciones` (en `mysql_mediciones`) |
 | Sensores | Microservicio Flask | 5003 | `sensores` (en `mysql_sensores`) |
 | Monitoreo | Microservicio Flask | 5002 | `monitoreo` (en `mysql_monitoreo`) |
+| Evaluador | Worker (imagen de Monitoreo) que evalúa lecturas nuevas y registra alertas | — | `monitoreo` (en `mysql_monitoreo`) |
 | Simulador | Proceso generador de datos | — | — |
 
-Todos los contenedores comparten la red `red_iot` de Docker Compose y se resuelven por
-nombre de servicio.
+Todos los contenedores comparten la red por defecto de Docker Compose y se resuelven por
+nombre de servicio. Solo Home (8080) se publica en el host; las APIs y las bases quedan en
+la red interna (`docker-compose.dev.yml` publica los puertos de las APIs para desarrollo).
 
 ## 4. Responsabilidades
 
@@ -46,6 +51,7 @@ nombre de servicio.
 | Mediciones | Registrar, consultar, modificar y borrar lecturas | `sensor_id`, `valor`, `unidad`, `timestamp` |
 | Sensores | Catálogo de sensores (alta, baja, estado activo) | `nombre`, `tipo`, `ubicacion`, `activo` |
 | Monitoreo | Resúmenes, umbrales por tipo y alertas | `umbrales`, `alertas` |
+| Evaluador | Evaluar automáticamente las lecturas nuevas contra los umbrales y registrar alertas | `alertas` |
 | Simulador | Generar lecturas de los sensores activos y enviarlas | — |
 
 ## 5. Comunicación entre servicios
@@ -64,9 +70,16 @@ nombre de servicio.
 
 - **Una base MySQL por servicio**: cada servicio es dueño de sus datos; ninguno accede
   a la base de otro, solo a su API.
-- **Autoinicialización**: cada servicio crea su base y sus tablas al arrancar y
-  reintenta mientras MySQL queda disponible. Compose además espera el healthcheck de
-  cada MySQL (`depends_on: condition: service_healthy`).
+- **Autoinicialización**: cada servicio crea sus tablas al arrancar (gunicorn lo hace una
+  sola vez, en `on_starting`) y reintenta mientras MySQL queda disponible. Si no lo logra,
+  el proceso termina con error y Docker lo reinicia. Compose espera el healthcheck de
+  cada MySQL y de cada API (`depends_on: condition: service_healthy`).
+- **Mínimo privilegio en BD**: cada MySQL crea un usuario con permisos solo sobre la base de
+  su servicio; los servicios no usan `root`.
+- **Consultas acotadas**: Mediciones devuelve por defecto las 100 lecturas más recientes y
+  calcula totales y promedios en SQL (`/mediciones/estadisticas`); nadie descarga la tabla completa.
+- **Evaluación automática**: el Evaluador procesa las lecturas nuevas con `desde_id`, en lugar
+  de depender de que alguien pulse "Evaluar".
 - **Servicio Sensores independiente**: el catálogo ya no es una lista fija del
   Simulador. El Simulador y Monitoreo lo consultan; el Simulador conserva un catálogo
   de respaldo si Sensores no responde.
@@ -78,6 +91,11 @@ nombre de servicio.
 - `GET /mediciones/sensor/<sensor_id>` reemplaza a `GET /mediciones/<sensor_id>`;
   ahora `GET /mediciones/<int:id>` devuelve una medición por su identificador.
 - `GET /monitoreo/<sensor_id>` devuelve `404` cuando el sensor no tiene lecturas.
+- `POST /monitoreo/evaluar/<sensor_id>` registra la alerta; `GET` sigue disponible pero es de solo lectura.
+- `GET /monitoreo/resumen-general` devuelve `promedios_por_unidad` en lugar de `promedio_global_sistema`
+  (promediar °C con % no tiene sentido).
+- `GET /mediciones` y `GET /mediciones/sensor/<sensor_id>` devuelven como máximo las 100
+  más recientes si no se indica `limit` (tope 1000).
 
 ## 8. Pendiente
 

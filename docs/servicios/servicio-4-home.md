@@ -23,7 +23,8 @@ Home no tiene base de datos ni lógica de negocio.
 | `index.html` | Estructura del dashboard y sus dos vistas |
 | `style.css` | Estilos |
 | `script.js` | Llamadas a las APIs, renderizado de resultados y gráfico |
-| `nginx.conf` | Sirve los estáticos y define el proxy hacia Mediciones y Monitoreo |
+| `nginx.conf` | Sirve los estáticos y define el proxy hacia Mediciones y Monitoreo (resuelve los servicios con el DNS de Docker en cada petición, así arranca aunque un servicio aún no exista) |
+| `proxy_params.conf` | Cabeceras y tiempos de espera comunes del proxy |
 | `Dockerfile` | Imagen `nginx:alpine` con la configuración y los estáticos |
 
 La gráfica usa Chart.js, cargada desde un CDN; si el navegador no tiene conexión, el resto de la interfaz funciona y solo se omite el gráfico.
@@ -49,11 +50,11 @@ Sensores no se expone por Home: el navegador no lo consulta directamente.
 
 | Solicita | Responde | Endpoint | Enviado | Recibido |
 |---|---|---|---|---|
-| Home (navegador) | Mediciones | `GET /mediciones`, `GET /mediciones?sensor_id=X&limit=10`, `GET /mediciones/<id>` | filtros opcionales | Lista o medición en JSON |
+| Home (navegador) | Mediciones | `GET /mediciones?limit=8`, `GET /mediciones?sensor_id=X&limit=10`, `GET /mediciones/<id>`, `GET /mediciones/estadisticas` | filtros opcionales | Lista, medición o totales en JSON |
 | Home (navegador) | Mediciones | `POST` / `PUT` / `PATCH` / `DELETE /mediciones[/<id>]` | JSON con `sensor_id`, `valor`, `unidad` | Medición creada, modificada o confirmación |
-| Home (navegador) | Monitoreo | `GET /monitoreo/resumen-general` | — | Total de lecturas, sensores y promedio global |
+| Home (navegador) | Monitoreo | `GET /monitoreo/resumen-general` | — | Total de lecturas, sensores y promedio por unidad |
 | Home (navegador) | Monitoreo | `GET /monitoreo/<sensor_id>` | id del sensor | Cantidad, promedio y última lectura |
-| Home (navegador) | Monitoreo | `GET /monitoreo/evaluar/<sensor_id>` | id del sensor | Evaluación contra el umbral (registra alerta si aplica) |
+| Home (navegador) | Monitoreo | `POST /monitoreo/evaluar/<sensor_id>` | id del sensor | Evaluación contra el umbral (registra alerta si aplica) |
 | Home (navegador) | Monitoreo | `GET /monitoreo/umbrales`, `GET /monitoreo/alertas?limit=10` | — | Lista en JSON |
 
 ## Variables de entorno
@@ -62,7 +63,7 @@ Home no usa variables de entorno: las rutas del proxy están fijas en `nginx.con
 
 ## Ejecución
 
-Home depende de Mediciones y Monitoreo para el proxy; conviene levantarlo con todo el sistema:
+Home espera (`depends_on: service_healthy`) a que Mediciones y Monitoreo estén saludables; conviene levantarlo con todo el sistema:
 
 ```bash
 docker compose up --build

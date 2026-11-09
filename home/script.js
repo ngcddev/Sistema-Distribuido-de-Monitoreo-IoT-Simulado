@@ -96,13 +96,16 @@ document.addEventListener('DOMContentLoaded', () => {
     async function consultarTotal() {
         marcarEstado('Consultando todas las mediciones...', '#d97706');
         try {
-            const respuesta = await fetch('/mediciones');
-            if (!respuesta.ok) {
-                throw new Error('Mediciones respondió ' + respuesta.status);
+            const [respuesta, respuestaTotal] = await Promise.all([
+                fetch('/mediciones?limit=8'),
+                fetch('/mediciones/estadisticas')
+            ]);
+            if (!respuesta.ok || !respuestaTotal.ok) {
+                throw new Error('Mediciones respondió ' + (respuesta.ok ? respuestaTotal.status : respuesta.status));
             }
-            const todas = await respuesta.json();
-            const recientes = todas.slice(-8).reverse();
-            lecturas.innerHTML = 'Total: ' + todas.length + ' lecturas. Últimas ' + recientes.length + ':<br>' +
+            const recientes = (await respuesta.json()).reverse();
+            const estadisticas = await respuestaTotal.json();
+            lecturas.innerHTML = 'Total: ' + escapar(estadisticas.total) + ' lecturas. Últimas ' + recientes.length + ':<br>' +
                 recientes.map(textoFila).join('<br>');
             resultado.textContent = '';
             marcarEstado('GET total ' + respuesta.status, '#10b981');
@@ -271,11 +274,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // Un promedio por unidad: promediar °C con % no tiene sentido.
+            const promedios = Object.entries(data.promedios_por_unidad || {})
+                .map(function ([unidad, promedio]) { return escapar(promedio) + ' ' + escapar(unidad); })
+                .join(' | ');
+
             panelMonitoreo.innerHTML = `
                 <strong style="color: #2563eb;">--- Resumen Global de la Red ---</strong><br>
-                <strong>Total lecturas registradas:</strong> ${data.total_lecturas_sistema}<br>
-                <strong>Sensores activos:</strong> ${data.total_sensores_activos} (${escapar(data.listado_sensores.join(', '))})<br>
-                <strong>Promedio general del sistema:</strong> ${data.promedio_global_sistema}
+                <strong>Total lecturas registradas:</strong> ${escapar(data.total_lecturas_sistema)}<br>
+                <strong>Sensores activos:</strong> ${escapar(data.total_sensores_activos)} (${escapar(data.listado_sensores.join(', '))})<br>
+                <strong>Promedio por unidad:</strong> ${promedios}
             `;
         } catch (err) {
             panelMonitoreo.innerHTML = `<span style="color: #b91c1c;">Error: ${err.message}. Asegúrate de que el microservicio Monitoreo esté activo.</span>`;
@@ -311,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sensorId = inputSensorMonitoreo ? inputSensorMonitoreo.value : 1;
         panelMonitoreo.innerHTML = `<em>Evaluando umbrales del sensor ${sensorId}...</em>`;
         try {
-            const respuesta = await fetch(`/monitoreo/evaluar/${sensorId}`);
+            const respuesta = await fetch(`/monitoreo/evaluar/${encodeURIComponent(sensorId)}`, { method: 'POST' });
             const data = await respuesta.json();
 
             if (!respuesta.ok) {

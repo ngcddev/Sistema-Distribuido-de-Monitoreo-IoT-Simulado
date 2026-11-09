@@ -1,3 +1,4 @@
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from database import conectar, inicializar
 app = Flask(__name__)
 
 LIMITE_MAXIMO = 1000
+LIMITE_POR_DEFECTO = 100
 
 
 @contextmanager
@@ -49,6 +51,13 @@ def sensor_valido(sensor_id):
     if not texto or len(texto) > 50:
         return None
     return texto
+
+
+def entero_positivo(texto):
+    """Convierte texto ASCII a entero >= 1; devuelve None si no es válido."""
+    if texto is None or not texto.isascii() or not texto.isdigit() or int(texto) < 1:
+        return None
+    return int(texto)
 
 
 def unidad_valida(unidad):
@@ -103,38 +112,98 @@ def crear_medicion():
     }), 201
 
 
+def ultimas_mediciones(condiciones, parametros, limite):
+    """Las `limite` mediciones más recientes que cumplen las condiciones, en orden cronológico."""
+    consulta = 'SELECT * FROM mediciones'
+    if condiciones:
+        consulta += ' WHERE ' + ' AND '.join(condiciones)
+    consulta = f'SELECT * FROM ({consulta} ORDER BY id DESC LIMIT %s) ultimas ORDER BY id'
+    with cursor_bd() as cursor:
+        cursor.execute(consulta, [*parametros, limite])
+        return cursor.fetchall()
+
+
+def leer_limite():
+    """Lee ?limit= de la petición. Devuelve (limite, error)."""
+    if 'limit' not in request.args:
+        return LIMITE_POR_DEFECTO, None
+    limite = entero_positivo(request.args['limit'])
+    if limite is None:
+        return None, 'limit debe ser un entero positivo'
+    return min(limite, LIMITE_MAXIMO), None
+
+
 @app.route('/mediciones', methods=['GET'])
 def listar_mediciones():
-    """Lista mediciones en orden cronológico. Filtros: ?sensor_id= , ?id= , ?limit= (las N más recientes)."""
+    """Mediciones en orden cronológico. Devuelve como máximo las N más recientes (por defecto 100, tope 1000).
+
+    Filtros: ?sensor_id= , ?id= , ?limit= , ?desde_id= (solo las posteriores a ese id).
+    """
     medicion_id = request.args.get('id')
     sensor_id = request.args.get('sensor_id')
-    limite = request.args.get('limit')
+    desde_id = request.args.get('desde_id')
 
     if medicion_id is not None:
-        if not medicion_id.isdigit():
+        if not medicion_id.isascii() or not medicion_id.isdigit():
             return jsonify({'error': 'id debe ser un entero'}), 400
         return obtener_medicion(int(medicion_id))
 
-    if limite is not None:
-        if not limite.isdigit() or int(limite) < 1:
-            return jsonify({'error': 'limit debe ser un entero positivo'}), 400
-        limite = min(int(limite), LIMITE_MAXIMO)
+    limite, error = leer_limite()
+    if error:
+        return jsonify({'error': error}), 400
 
-    consulta = 'SELECT * FROM mediciones'
-    parametros = []
+    condiciones, parametros = [], []
     if sensor_id:
-        consulta += ' WHERE sensor_id = %s'
+        condiciones.append('sensor_id = %s')
         parametros.append(sensor_id)
+    if desde_id is not None:
+        if not desde_id.isascii() or not desde_id.isdigit():
+            return jsonify({'error': 'desde_id debe ser un entero'}), 400
+        condiciones.append('id > %s')
+        parametros.append(int(desde_id))
 
-    if limite:
-        consulta = f'SELECT * FROM ({consulta} ORDER BY id DESC LIMIT %s) ultimas ORDER BY id'
-        parametros.append(limite)
-    else:
-        consulta += ' ORDER BY id'
+    return respuesta_con_limite(ultimas_mediciones(condiciones, parametros, limite), limite)
 
+
+def respuesta_con_limite(lista, limite):
+    """JSON de la lista con la cabecera X-Limite, para que el cliente sepa que la lista está acotada."""
+    respuesta = jsonify(lista)
+    respuesta.headers['X-Limite'] = str(limite)
+    return respuesta, 200
+
+
+@app.route('/mediciones/estadisticas', methods=['GET'])
+def estadisticas():
+    """Total, sensores con lecturas y promedio por unidad, calculados en SQL. Filtro opcional: ?sensor_id=.
+
+    No hay un promedio global: mezclaría magnitudes distintas (°C con %). `promedio` solo se
+    incluye al filtrar por sensor, cuyas lecturas comparten unidad.
+    """
+    sensor_id = request.args.get('sensor_id')
+    donde, parametros = ('WHERE sensor_id = %s', [sensor_id]) if sensor_id else ('', [])
     with cursor_bd() as cursor:
-        cursor.execute(consulta, parametros)
-        resultado = cursor.fetchall()
+        cursor.execute(
+            "SELECT COALESCE(unidad, '') AS unidad, COUNT(*) AS total, AVG(valor) AS promedio "
+            f'FROM mediciones {donde} GROUP BY unidad ORDER BY unidad',
+            parametros,
+        )
+        grupos = cursor.fetchall()
+        cursor.execute(f'SELECT DISTINCT sensor_id FROM mediciones {donde} ORDER BY sensor_id', parametros)
+        sensores = [fila['sensor_id'] for fila in cursor.fetchall()]
+
+    total = sum(g['total'] for g in grupos)
+    resultado = {
+        'total': total,
+        'sensores': sensores,
+        'por_unidad': [
+            {'unidad': g['unidad'], 'total': g['total'], 'promedio': round(float(g['promedio']), 2)}
+            for g in grupos
+        ],
+    }
+    if sensor_id:
+        # Promedio ponderado de los grupos = promedio de todas las lecturas del sensor.
+        suma = sum(float(g['promedio']) * g['total'] for g in grupos)
+        resultado['promedio'] = round(suma / total, 2) if total else None
     return jsonify(resultado), 200
 
 
@@ -150,10 +219,10 @@ def obtener_medicion(medicion_id):
 
 @app.route('/mediciones/sensor/<sensor_id>', methods=['GET'])
 def obtener_mediciones_por_sensor(sensor_id):
-    with cursor_bd() as cursor:
-        cursor.execute('SELECT * FROM mediciones WHERE sensor_id = %s ORDER BY id', (sensor_id,))
-        resultado = cursor.fetchall()
-    return jsonify(resultado), 200
+    limite, error = leer_limite()
+    if error:
+        return jsonify({'error': error}), 400
+    return respuesta_con_limite(ultimas_mediciones(['sensor_id = %s'], [sensor_id], limite), limite)
 
 
 @app.route('/mediciones/<int:medicion_id>', methods=['PUT'])
@@ -234,5 +303,7 @@ def eliminar_medicion(medicion_id):
 
 
 if __name__ == '__main__':
-    inicializar()
+    # Solo para desarrollo local; en el contenedor se ejecuta con gunicorn (ver gunicorn_conf.py).
+    if not inicializar():
+        sys.exit('[mediciones] no se pudo preparar la base de datos')
     app.run(host='0.0.0.0', port=5001)
