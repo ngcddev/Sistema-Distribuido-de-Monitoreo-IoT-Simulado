@@ -22,6 +22,7 @@ flowchart TD
     EV[Evaluador] -- "GET /mediciones?desde_id" --> M
     EV -- "GET /sensores/id" --> S
     EV --> DBMO
+    PU[Purgador] --> DBM
     SIM[Simulador] -- "GET /sensores" --> S
     SIM -- "POST /mediciones" --> M
     M --> DBM[("mysql_mediciones")]
@@ -37,7 +38,8 @@ flowchart TD
 | Mediciones | Microservicio Flask | 5001 | `mediciones` (en `mysql_mediciones`) |
 | Sensores | Microservicio Flask | 5003 | `sensores` (en `mysql_sensores`) |
 | Monitoreo | Microservicio Flask | 5002 | `monitoreo` (en `mysql_monitoreo`) |
-| Evaluador | Worker (imagen de Monitoreo) que evalúa lecturas nuevas y registra alertas | — | `monitoreo` (en `mysql_monitoreo`) |
+| Evaluador | Worker (imagen de Monitoreo) que evalúa lecturas nuevas, registra alertas y purga las antiguas | — | `monitoreo` (en `mysql_monitoreo`) |
+| Purgador | Worker (imagen de Mediciones) que borra las lecturas más antiguas que `RETENCION_DIAS` | — | `mediciones` (en `mysql_mediciones`) |
 | Simulador | Proceso generador de datos | — | — |
 
 Todos los contenedores comparten la red por defecto de Docker Compose y se resuelven por
@@ -52,7 +54,8 @@ la red interna (`compose.dev.yaml` publica los puertos de las APIs para desarrol
 | Mediciones | Registrar, consultar, modificar y borrar lecturas | `sensor_id`, `valor`, `unidad`, `timestamp` |
 | Sensores | Catálogo de sensores (alta, baja, estado activo) | `nombre`, `tipo`, `ubicacion`, `activo` |
 | Monitoreo | Resúmenes, umbrales por tipo y alertas | `umbrales`, `alertas` |
-| Evaluador | Evaluar automáticamente las lecturas nuevas contra los umbrales y registrar alertas | `alertas` |
+| Evaluador | Evaluar automáticamente las lecturas nuevas contra los umbrales, registrar alertas y borrar las antiguas | `alertas` |
+| Purgador | Aplicar la retención de lecturas (borrado por lotes cada hora) | — |
 | Simulador | Generar lecturas de los sensores activos y enviarlas | — |
 
 ## 5. Comunicación entre servicios
@@ -96,6 +99,18 @@ la red interna (`compose.dev.yaml` publica los puertos de las APIs para desarrol
   cuarto servicio con base de datos.
 - **Interfaz sin dependencias externas**: Chart.js se sirve desde `home/vendor/` (sin CDN) y Nginx aplica
   una política de seguridad de contenido estricta (sin scripts ni estilos en línea).
+- **Escritura protegida en el borde**: Nginx deja consultar libremente, pero crear, modificar y borrar
+  (`POST`, `PUT`, `PATCH`, `DELETE`) exige las credenciales de `HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`
+  (autenticación Basic; `401` si faltan o no coinciden). La excepción es `POST /monitoreo/evaluar/*`, que es
+  idempotente. Las credenciales se validan en Nginx y no se reenvían a las APIs, que siguen sin autenticación
+  propia: por eso solo Home se publica. Se aceptó una única cuenta y HTTP sin cifrar (válido en local o en una
+  demostración); con HTTPS y usuarios con roles el esquema crecería hacia un servicio de identidad.
+- **Retención de datos**: las lecturas se conservan `RETENCION_DIAS` (30 por defecto). Un proceso aparte (el
+  Purgador) las borra por lotes cada hora, y el Evaluador hace lo mismo con las alertas. Separarlo de la API
+  evita que una purga larga compita con las peticiones y sigue el mismo patrón que el Evaluador.
+- **Lecturas editables, pero con credenciales**: se mantienen `PUT`, `PATCH` y `DELETE` sobre las lecturas para
+  poder corregir errores; en telemetría pura serían inmutables, y esa restricción es una decisión pendiente
+  de revisar si el sistema pasa a producción.
 - **Evaluación automática**: el Evaluador procesa las lecturas nuevas con `desde_id`, en lugar
   de depender de que alguien pulse "Evaluar".
 - **Servicio Sensores independiente**: el catálogo ya no es una lista fija del
@@ -114,9 +129,12 @@ la red interna (`compose.dev.yaml` publica los puertos de las APIs para desarrol
   (promediar °C con % no tiene sentido).
 - `GET /mediciones` y `GET /mediciones/sensor/<sensor_id>` devuelven como máximo las 100
   más recientes si no se indica `limit` (tope 1000).
+- Escribir a través de Home (`POST`, `PUT`, `PATCH`, `DELETE`) exige credenciales de administración y responde
+  `401` si faltan. Consultar y `POST /monitoreo/evaluar/*` siguen siendo libres.
+- Las lecturas y alertas con más de `RETENCION_DIAS` (30 por defecto) se borran automáticamente.
 
 ## 8. Pendiente
 
 - Servicio de Notificaciones que consuma las alertas.
-- Autenticación y seguridad.
+- HTTPS y usuarios con roles (hoy hay una sola cuenta de administración).
 - Despliegue en la nube.

@@ -41,6 +41,19 @@ function buscarChrome() {
 }
 
 // ---------------------------------------------------------------- servidor simulado
+// Credenciales de prueba y la misma regla de acceso que nginx.conf (una prueba más abajo comprueba que
+// nginx.conf realmente contiene esa regla): consultar es libre; crear, modificar y borrar piden credenciales,
+// salvo evaluar un sensor, que es idempotente.
+const ADMIN = { usuario: 'admin', clave: 'clave-de-prueba' };
+const basic = (usuario, clave) => 'Basic ' + Buffer.from(`${usuario}:${clave}`).toString('base64');
+const CREDENCIALES_OK = basic(ADMIN.usuario, ADMIN.clave);
+
+function requiereCredenciales(req, ruta) {
+    if (req.method === 'GET' || req.method === 'HEAD') return false;
+    if (/^\/monitoreo\/evaluar(\/|$)/.test(ruta)) return false;
+    return req.headers.authorization !== CREDENCIALES_OK;
+}
+
 const ahora = '2026-01-02T03:04:05+00:00';
 const lectura = (id) => ({ id, sensor_id: '1', valor: 20 + id, unidad: 'C', timestamp: ahora });
 
@@ -50,12 +63,23 @@ function crearServidor() {
 
     const servidor = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://localhost');
-        estado.peticiones.push({ metodo: req.method, ruta: url.pathname + url.search });
+        const registro = { metodo: req.method, ruta: url.pathname + url.search, codigo: null };
+        estado.peticiones.push(registro);
+        res.on('finish', () => { registro.codigo = res.statusCode; });
         const json = (codigo, cuerpo) => {
             res.writeHead(codigo, { 'Content-Type': 'application/json', ...seguridad });
             res.end(JSON.stringify(cuerpo));
         };
         const ruta = url.pathname;
+
+        if ((ruta.startsWith('/mediciones') || ruta.startsWith('/monitoreo')) && requiereCredenciales(req, ruta)) {
+            res.writeHead(401, {
+                'Content-Type': 'application/json',
+                'WWW-Authenticate': 'Basic realm="AgroSense admin"',
+                ...seguridad,
+            });
+            return res.end(JSON.stringify({ error: 'se requieren credenciales de administrador para modificar datos' }));
+        }
 
         if (req.method === 'GET' && !ruta.startsWith('/mediciones') && !ruta.startsWith('/monitoreo')) {
             const archivo = path.join(HOME, ruta === '/' ? 'index.html' : ruta);
@@ -138,8 +162,14 @@ describe('Home en el navegador', () => {
     });
 
     // Abre una página y acumula todo lo que sea un error (consola, excepciones, recursos que fallan).
-    async function abrir(ruta = '/') {
+    // Por defecto la página entra como administrador; { autenticado: false } simula a un visitante.
+    // Chrome sin interfaz no puede mostrar el diálogo de usuario y contraseña (la petición se quedaría
+    // colgada), así que el visitante "cancela" el diálogo: responde al desafío con credenciales vacías.
+    async function abrir(ruta = '/', { autenticado = true, clave = ADMIN.clave } = {}) {
         const pagina = await navegador.newPage();
+        await pagina.authenticate(autenticado
+            ? { username: ADMIN.usuario, password: clave }
+            : { username: '', password: '' });
         const errores = [];
         pagina.on('console', (m) => { if (m.type() === 'error') errores.push('consola: ' + m.text()); });
         pagina.on('pageerror', (e) => errores.push('excepción: ' + e.message));
@@ -261,6 +291,53 @@ describe('Home en el navegador', () => {
         await pagina.close();
     });
 
+    it('escribir sin credenciales se rechaza con un mensaje claro y no se modifica nada', async () => {
+        const { pagina } = await abrir('/#administracion', { autenticado: false });
+        await pagina.waitForFunction(() => document.getElementById('lecturas').textContent.includes('Total'));
+        await pagina.type('#valor', '20');
+        await pagina.click('#btn-post');
+        await pagina.waitForFunction(() => document.getElementById('status').textContent.includes('credenciales'));
+        assert.match(await texto(pagina, '#status'), /credenciales de administrador/);
+        assert.match(await texto(pagina, '#resultado'), /credenciales de administrador/);
+        // Chrome reintenta una vez tras el desafío: todos los intentos deben ser 401 y ninguno puede aceptarse.
+        const posts = estado.peticiones.filter((p) => p.metodo === 'POST' && p.ruta === '/mediciones');
+        assert.ok(posts.length >= 1 && posts.every((p) => p.codigo === 401), JSON.stringify(posts));
+        await pagina.close();
+    });
+
+    it('con credenciales equivocadas también se rechaza', async () => {
+        const { pagina } = await abrir('/#administracion', { clave: 'otra-clave' });
+        await pagina.waitForFunction(() => document.getElementById('lecturas').textContent.includes('Total'));
+        await pagina.type('#valor', '20');
+        await pagina.click('#btn-post');
+        await pagina.waitForFunction(() => document.getElementById('status').textContent.includes('credenciales'));
+        const posts = estado.peticiones.filter((p) => p.metodo === 'POST' && p.ruta === '/mediciones');
+        assert.ok(posts.length >= 1 && posts.every((p) => p.codigo === 401), JSON.stringify(posts));
+        await pagina.close();
+    });
+
+    it('con las credenciales correctas se puede crear una lectura', async () => {
+        const { pagina, errores } = await abrir('/#administracion');
+        await pagina.waitForFunction(() => document.getElementById('lecturas').textContent.includes('Total'));
+        await pagina.type('#valor', '20');
+        await pagina.click('#btn-post');
+        await pagina.waitForFunction(() => document.getElementById('status').textContent.includes('POST 201'));
+        assert.deepEqual(errores, []);
+        await pagina.close();
+    });
+
+    it('consultar y evaluar un sensor no piden credenciales', async () => {
+        const { pagina, errores } = await abrir('/', { autenticado: false });
+        await pagina.click('#btn-evaluar-sensor');
+        await pagina.waitForFunction(() => document.getElementById('panel-monitoreo').textContent.includes('ALERTA_CRITICA'));
+        await pagina.click('#btn-ver-umbrales');
+        await pagina.waitForFunction(() => document.getElementById('panel-monitoreo').textContent.includes('Umbrales configurados'));
+        await new Promise((ok) => setTimeout(ok, 100));
+        assert.deepEqual(estado.peticiones.filter((p) => p.codigo === 401), []);
+        assert.deepEqual(errores, []);
+        await pagina.close();
+    });
+
     it('no pide nada a un CDN externo', async () => {
         const { pagina } = await abrir();
         const externas = await pagina.evaluate(() => performance.getEntriesByType('resource')
@@ -379,5 +456,55 @@ describe('Home en el navegador', () => {
         const fuente = fs.readFileSync(path.join(HOME, 'script.js'), 'utf8');
         assert.doesNotMatch(fuente, /#10b981|#d97706/, 'colores de bajo contraste');
         await pagina.close();
+    });
+});
+
+// El servidor simulado de arriba replica la regla de acceso de nginx.conf. Estas pruebas leen el archivo real
+// y comprueban que esa regla existe, para que simulacro y configuración no se separen sin que nadie se entere.
+describe('nginx.conf: reglas de acceso', () => {
+    const conf = fs.readFileSync(path.join(HOME, 'nginx.conf'), 'utf8');
+    const bloque = (inicio) => {
+        const desde = conf.indexOf(inicio);
+        assert.ok(desde >= 0, `no existe «${inicio}»`);
+        return conf.slice(desde, conf.indexOf('\n    }', desde));
+    };
+
+    it('solo GET y HEAD se consideran lecturas; todo lo demás escribe', () => {
+        const mapa = conf.slice(conf.indexOf('map $request_method $escribe'), conf.indexOf('}', conf.indexOf('map $request_method $escribe')));
+        assert.match(mapa, /default\s+1;/);
+        assert.match(mapa, /GET\s+0;/);
+        assert.match(mapa, /HEAD\s+0;/);
+        assert.doesNotMatch(mapa, /(POST|PUT|PATCH|DELETE)\s+0;/);
+    });
+
+    it('escribir sin credenciales válidas se deniega', () => {
+        const mapa = conf.slice(conf.indexOf('map "$escribe$credenciales_ok" $denegar'));
+        assert.match(mapa, /"10"\s+1;/);
+        assert.match(mapa, /default\s+0;/);
+    });
+
+    it('/mediciones y /monitoreo deniegan la escritura sin credenciales', () => {
+        for (const inicio of ['location ~ ^/mediciones(/|$)', 'location ~ ^/monitoreo(/|$)']) {
+            assert.match(bloque(inicio), /if \(\$denegar\) \{\s*return 401;/, inicio);
+        }
+    });
+
+    it('evaluar un sensor queda libre y se evalúa antes que la regla general de /monitoreo', () => {
+        const evaluar = 'location ~ ^/monitoreo/evaluar(/|$)';
+        assert.doesNotMatch(bloque(evaluar), /\$denegar/);
+        assert.ok(conf.indexOf(evaluar) < conf.indexOf('location ~ ^/monitoreo(/|$)'),
+            'la regla de evaluar debe ir primero: nginx usa la primera expresión regular que coincide');
+    });
+
+    it('el 401 devuelve JSON y el desafío Basic para que el navegador pida las credenciales', () => {
+        assert.match(conf, /error_page 401 = @pedir_credenciales;/);
+        const respuesta = bloque('location @pedir_credenciales');
+        assert.match(respuesta, /WWW-Authenticate 'Basic realm="[^"]+"' always;/);
+        assert.match(respuesta, /default_type application\/json;/);
+    });
+
+    it('las credenciales no se reenvían a las APIs', () => {
+        const proxy = fs.readFileSync(path.join(HOME, 'proxy_params.conf'), 'utf8');
+        assert.match(proxy, /proxy_set_header Authorization "";/);
     });
 });

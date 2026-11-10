@@ -1,0 +1,11 @@
+# Fin de línea: siempre LF en el repositorio y en la copia de trabajo (también en Windows).
+# Evita los avisos "LF will be replaced by CRLF" y que los scripts y Dockerfiles se rompan por un CR sobrante.
+* text=auto eol=lf
+
+# Archivos binarios: no se tocan.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary

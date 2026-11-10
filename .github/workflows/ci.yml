@@ -61,7 +61,7 @@ jobs:
       - name: Instalar Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Instalar dependencias
         working-directory: home/e2e
@@ -99,8 +99,14 @@ jobs:
           # Home debe llegar a las APIs a través del proxy de Nginx
           curl -fsS localhost:8080/ > /dev/null
           curl -fsS localhost:8080/monitoreo/umbrales
+          # Escribir exige las credenciales de administración (las de .env.example); consultar es libre
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/mediciones \
+            -H 'Content-Type: application/json' -d '{"sensor_id": 1, "valor": 99}')" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -u admin:clave-equivocada localhost:8080/mediciones \
+            -H 'Content-Type: application/json' -d '{"sensor_id": 1, "valor": 99}')" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE localhost:8080/mediciones/1)" = 401
           # Alta de una lectura fuera de rango y evaluación manual
-          curl -fsS -X POST localhost:8080/mediciones -H 'Content-Type: application/json' \
+          curl -fsS -X POST -u admin:cambiar-admin localhost:8080/mediciones -H 'Content-Type: application/json' \
             -d '{"sensor_id": 1, "valor": 99, "unidad": "C"}'
           curl -fsS localhost:8080/mediciones/estadisticas
           # La evaluación responde con su resultado (no se exige ALERTA_CRITICA: el simulador
@@ -108,7 +114,7 @@ jobs:
           curl -fsS -X POST localhost:8080/monitoreo/evaluar/1 | grep -q evaluacion
           curl -fsS "localhost:8080/monitoreo/alertas?limit=5" > /dev/null
           # Un sensor que no está en el catálogo se rechaza
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/mediciones \
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -u admin:cambiar-admin localhost:8080/mediciones \
             -H 'Content-Type: application/json' -d '{"sensor_id": 999, "valor": 1}')" = 400
           # Home sirve Chart.js localmente y con cabeceras de seguridad
           curl -fsS localhost:8080/vendor/chart.umd.min.js > /dev/null

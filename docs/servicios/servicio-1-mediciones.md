@@ -11,7 +11,7 @@ API REST (Flask) que recibe, almacena, consulta, modifica y elimina las lecturas
 | Código | `mediciones/app.py`, `mediciones/database.py` |
 | Framework | Flask (servido con gunicorn) |
 | Puerto | `5001` |
-| Contenedor Compose | `mediciones` |
+| Contenedor Compose | `mediciones` (API) y `purgador` (`mediciones/purga.py`, misma imagen) |
 | Base de datos | `mediciones` en el contenedor `mysql_mediciones` |
 
 ## Endpoints
@@ -51,6 +51,16 @@ Hay tres formas de obtener lecturas concretas y se mantienen por compatibilidad:
 para una medición), `GET /mediciones?id=<id>` (heredada, equivalente) y `GET /mediciones/sensor/<sensor_id>`
 (equivale a `GET /mediciones?sensor_id=<sensor_id>`). Las nuevas integraciones deben usar las preferidas.
 
+## Retención (Purgador)
+
+El servicio `purgador` ejecuta `mediciones/purga.py`: cada hora (`PURGA_INTERVALO_SEGUNDOS`) borra las lecturas
+cuyo `timestamp` es anterior a `RETENCION_DIAS` días (30 por defecto). Borra por lotes de 10 000 filas para no
+bloquear la tabla mientras entran lecturas nuevas, y usa el índice por fecha. Con `RETENCION_DIAS=0` no borra
+nada. Si la base falla, lo registra y lo reintenta en el siguiente ciclo. Las alertas las purga el Evaluador.
+
+Para comprobarlo a mano: crear una lectura antigua (`timestamp` de hace más de `RETENCION_DIAS` días) y esperar
+al siguiente ciclo (o bajar `PURGA_INTERVALO_SEGUNDOS`).
+
 ## Base de datos
 
 | Base | Tabla | Columnas |
@@ -69,6 +79,8 @@ Script de referencia: [`bases_datos/mediciones.sql`](../../bases_datos/medicione
 | `DB_PASSWORD` | Contraseña de MySQL | `DB_PASSWORD` del `.env` |
 | `DB_NAME` | Nombre de la base | `mediciones` |
 | `SENSORES_URL` | URL de Sensores para validar `sensor_id` (opcional; sin ella no se valida) | `http://sensores:5003` |
+| `RETENCION_DIAS` | Solo `purgador`: días que se conservan las lecturas (`0` = no borrar) | `30` |
+| `PURGA_INTERVALO_SEGUNDOS` | Solo `purgador`: segundos entre revisiones | `3600` |
 
 ## Comunicación
 

@@ -24,10 +24,11 @@ Home no tiene base de datos ni lógica de negocio.
 | `style.css` | Estilos: variables de color en `:root`, clases de estado (`.estado-*`) y sin estilos en línea |
 | `script.js` | Llamadas a las APIs, renderizado de resultados (como texto, nunca como HTML) y gráfico |
 | `nginx.conf` | Sirve los estáticos y define el proxy hacia Mediciones y Monitoreo (resuelve los servicios con el DNS de Docker en cada petición, así arranca aunque un servicio aún no exista) |
+| `docker-entrypoint.d/15-credenciales.sh` | Se ejecuta al arrancar el contenedor: genera `/tmp/credenciales.conf` con las credenciales de administración que Nginx exige para escribir |
 | `proxy_params.conf` | Cabeceras y tiempos de espera comunes del proxy |
 | `favicon.svg` | Icono de la pestaña |
 | `e2e/` | Pruebas de navegador (ver README, "Integración continua") |
-| `vendor/chart.umd.min.js` | Chart.js 4.4.1 (MIT) servido localmente, sin CDN |
+| `vendor/chart.umd.min.js` | Chart.js 4.4.1 (MIT) servido localmente, sin CDN. Cómo actualizarlo: `vendor/README.md` |
 | `Dockerfile` | Imagen `nginxinc/nginx-unprivileged:1.28-alpine` (no corre como root) con la configuración y los estáticos |
 
 La gráfica usa Chart.js incluido en `home/vendor/`, así que funciona sin conexión a internet. Se refresca sola cada 10 s mientras se vea la vista general.
@@ -61,6 +62,12 @@ Sensores no se expone por Home: el navegador no lo consulta directamente.
 
 Las rutas del proxy solo coinciden con `/mediciones` y `/monitoreo` (y sus subrutas), no con prefijos como `/medicionesXYZ`.
 
+### Acceso: quién puede escribir
+
+Nginx permite **consultar** libremente, pero **crear, modificar y borrar** (`POST`, `PUT`, `PATCH`, `DELETE` sobre `/mediciones` y `/monitoreo`) exige el usuario y la contraseña de `HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`. Sin ellas responde `401` con el desafío Basic (el navegador muestra su diálogo de acceso) y un JSON con el motivo; la pantalla de administración lo muestra como mensaje de error. `POST /monitoreo/evaluar/*` queda libre porque es idempotente.
+
+Al arrancar, `15-credenciales.sh` convierte las dos variables en la cabecera `Authorization` esperada y la guarda en `/tmp/credenciales.conf`; `nginx.conf` la incluye y decide con dos `map` (¿escribe?, ¿credenciales correctas?). Las credenciales no se reenvían a las APIs. Limitaciones: autenticación Basic sobre HTTP (usuario y contraseña viajan sin cifrar; para exponerlo hace falta HTTPS) y una sola cuenta.
+
 ### Seguridad
 
 Nginx añade `Content-Security-Policy` (solo recursos propios, sin scripts ni estilos en línea: la interfaz usa clases de `style.css`), `X-Content-Type-Options`, `X-Frame-Options: DENY` y `Referrer-Policy`, oculta la versión del servidor, comprime con gzip y hace que el navegador revalide los estáticos en cada carga.
@@ -78,7 +85,12 @@ Nginx añade `Content-Security-Policy` (solo recursos propios, sin scripts ni es
 
 ## Variables de entorno
 
-Home no usa variables de entorno: las rutas del proxy están fijas en `nginx.conf` con los nombres de servicio de Compose.
+| Variable | Descripción | Valor |
+|---|---|---|
+| `HOME_ADMIN_USER` | Usuario que Nginx exige para escribir | obligatoria (`.env`) |
+| `HOME_ADMIN_PASSWORD` | Contraseña de ese usuario | obligatoria (`.env`) |
+
+Las rutas del proxy están fijas en `nginx.conf` con los nombres de servicio de Compose.
 
 ## Ejecución
 

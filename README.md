@@ -45,6 +45,7 @@ flowchart TD
     EV[Evaluador] -- "GET /mediciones?desde_id" --> M
     EV -- "GET /sensores/id" --> S
     EV --> DBMO
+    PU[Purgador] --> DBM
     SIM[Simulador] -- "GET /sensores" --> S
     SIM -- "POST /mediciones" --> M
     M --> DBM[("mysql_mediciones")]
@@ -62,6 +63,7 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 | **Mediciones** | Registrar y consultar lecturas | `5001` | Sensores (validación), MySQL propio | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
 | **Monitoreo** | Resúmenes, umbrales y alertas | `5002` | Mediciones, Sensores, MySQL propio | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
 | **Sensores** | Catálogo de sensores | `5003` | MySQL propio | [servicio-sensores](docs/servicios/servicio-sensores.md) |
+| **Purgador** | Borrar cada hora las lecturas más antiguas que `RETENCION_DIAS` (sin API) | — | MySQL de Mediciones | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
 | **Evaluador** | Evaluar automáticamente las lecturas nuevas y registrar alertas (mismo código que Monitoreo, sin API) | — | Mediciones, Sensores, MySQL de Monitoreo | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
 | **Simulador** | Generar lecturas y enviarlas a Mediciones (sin API) | — | Sensores, Mediciones | [servicio-3-simulador](docs/servicios/servicio-3-simulador.md) |
 
@@ -120,13 +122,17 @@ referencia en [bases_datos/](bases_datos/).
 ## Variables de entorno
 
 Se definen en `.env` (copiar de [.env.example](.env.example)). **`.env` es obligatorio**:
-Compose se detiene con un mensaje claro si faltan `MYSQL_ROOT_PASSWORD`, `DB_USER` o `DB_PASSWORD`.
+Compose se detiene con un mensaje claro si faltan `MYSQL_ROOT_PASSWORD`, `DB_USER`, `DB_PASSWORD`,
+`HOME_ADMIN_USER` o `HOME_ADMIN_PASSWORD`.
 
 | Variable | Uso | Por defecto |
 |---|---|---|
 | `MYSQL_ROOT_PASSWORD` | Contraseña root de los tres MySQL (solo la usa MySQL) | obligatoria |
 | `DB_USER` | Usuario de los servicios (no puede ser `root`) | obligatoria |
 | `DB_PASSWORD` | Contraseña de ese usuario | obligatoria |
+| `HOME_ADMIN_USER` | Usuario que Nginx exige para crear, modificar y borrar datos | obligatoria |
+| `HOME_ADMIN_PASSWORD` | Contraseña de ese usuario | obligatoria |
+| `RETENCION_DIAS` | Días que se conservan lecturas y alertas (`0` = no borrar nada) | `30` |
 | `INTERVALO_SEGUNDOS` | Segundos entre envíos del Simulador | `5` |
 | `INTERVALO_EVALUACION_SEGUNDOS` | Segundos entre ciclos del Evaluador | `10` |
 
@@ -145,6 +151,24 @@ docker compose up --build
 
 Por defecto solo se publica **Home** (<http://localhost:8080>). Las APIs quedan en la red
 interna de Compose y se alcanzan a través del proxy de Home (`/mediciones`, `/monitoreo`).
+
+### Quién puede escribir
+
+Consultar es libre. **Crear, modificar y borrar** (`POST`, `PUT`, `PATCH` y `DELETE` sobre `/mediciones` y
+`/monitoreo`) exige el usuario y la contraseña de `HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`: el navegador
+muestra el diálogo de acceso la primera vez que se intenta escribir desde la pantalla de administración. Sin
+credenciales (o con unas incorrectas) Nginx responde `401`. Evaluar un sensor
+(`POST /monitoreo/evaluar/<id>`) no las pide: es idempotente y solo deriva datos que ya existen.
+
+```bash
+curl -u admin:cambiar-admin -X POST localhost:8080/mediciones \
+  -H 'Content-Type: application/json' -d '{"sensor_id": 1, "valor": 21.5, "unidad": "C"}'
+```
+
+> **Límites:** la autenticación es de tipo Basic sobre HTTP, así que usuario y contraseña viajan sin cifrar:
+> es adecuada en local o para una demostración; para exponer el sistema hace falta HTTPS. Hay una sola cuenta
+> (sin usuarios ni roles). Los puertos de `compose.dev.yaml` publican las APIs **sin** esta protección: solo
+> para desarrollo.
 
 Para desarrollo, publica también los puertos de las APIs:
 
@@ -199,7 +223,7 @@ Pruebas en local (no necesitan Docker):
 pip install -r <servicio>/requirements.txt -r requirements-dev.txt
 cd <servicio> && python -m pytest
 
-# Home en un navegador real (usa el Chrome instalado; CHROME_PATH para indicar otro)
+# Home en un navegador real (Node >= 22.12; usa el Chrome instalado, CHROME_PATH para indicar otro)
 cd home/e2e && npm install && npm test
 ```
 
@@ -230,4 +254,4 @@ Las pruebas del Home sirven la interfaz con las mismas cabeceras de seguridad qu
 El estado de la auditoría y lo que requiere supervisión está en [docs/seguimiento-auditoria.md](docs/seguimiento-auditoria.md).
 
 - Servicio de Notificaciones que consuma las alertas.
-- Autenticación, seguridad y despliegue en la nube.
+- HTTPS, usuarios con roles y despliegue en la nube (hoy hay una sola cuenta de administración).

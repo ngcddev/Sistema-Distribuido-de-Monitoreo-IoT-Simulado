@@ -119,8 +119,23 @@ services:
       MEDICIONES_URL: http://mediciones:5001
       SENSORES_URL: http://sensores:5003
       INTERVALO_EVALUACION_SEGUNDOS: ${INTERVALO_EVALUACION_SEGUNDOS:-10}
+      RETENCION_DIAS: ${RETENCION_DIAS:-30}  # también borra las alertas más antiguas
     depends_on:
       monitoreo:
+        condition: service_healthy
+
+  # Borra cada hora las lecturas más antiguas que RETENCION_DIAS (misma imagen que mediciones).
+  purgador:
+    build: ./mediciones
+    command: ["python", "purga.py"]
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      DB_HOST: mysql_mediciones
+      DB_NAME: mediciones
+      RETENCION_DIAS: ${RETENCION_DIAS:-30}
+    depends_on:
+      mediciones:
         condition: service_healthy
 
   simulador:
@@ -141,6 +156,10 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"  # nginx-unprivileged escucha en 8080 dentro del contenedor
+    environment:
+      # Credenciales que Nginx exige para crear, modificar y borrar datos (consultar es libre).
+      HOME_ADMIN_USER: ${HOME_ADMIN_USER:?Define HOME_ADMIN_USER en .env (copiar de .env.example)}
+      HOME_ADMIN_PASSWORD: ${HOME_ADMIN_PASSWORD:?Define HOME_ADMIN_PASSWORD en .env (copiar de .env.example)}
     depends_on:
       mediciones:
         condition: service_healthy

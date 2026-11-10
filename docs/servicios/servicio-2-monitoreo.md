@@ -36,6 +36,8 @@ API REST (Flask) que analiza las mediciones: calcula resúmenes por sensor y glo
 
 El servicio `evaluador` ejecuta `monitoreo/worker.py`: al arrancar toma como punto de partida la última lectura existente y, cada `INTERVALO_EVALUACION_SEGUNDOS`, evalúa las lecturas posteriores (`GET /mediciones?desde_id=...`) y registra una alerta por cada una fuera de rango. Si Mediciones o la BD fallan, reintenta desde la última lectura procesada. No genera alertas del historial anterior a su arranque.
 
+El mismo proceso aplica la retención a las alertas: cada hora borra las anteriores a `RETENCION_DIAS` (30 por defecto; `0` desactiva el borrado), por lotes de 10 000. Las lecturas las purga el servicio `purgador` de Mediciones.
+
 ## Cambio de contrato
 
 - `GET /monitoreo/<sensor_id>` devuelve **`404`** cuando el sensor no tiene lecturas.
@@ -64,6 +66,7 @@ Umbrales iniciales: temperatura 10–35 °C y humedad 30–80 %. Script de refer
 | `MEDICIONES_URL` | URL del servicio Mediciones | `http://mediciones:5001` |
 | `SENSORES_URL` | URL del servicio Sensores | `http://sensores:5003` |
 | `INTERVALO_EVALUACION_SEGUNDOS` | Solo `evaluador`: segundos entre ciclos | `10` |
+| `RETENCION_DIAS` | Solo `evaluador`: días que se conservan las alertas (`0` = no borrar) | `30` |
 
 ## Comunicación
 
