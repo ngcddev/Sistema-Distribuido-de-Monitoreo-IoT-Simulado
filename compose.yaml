@@ -134,6 +134,7 @@ services:
       DB_HOST: mysql_mediciones
       DB_NAME: mediciones
       RETENCION_DIAS: ${RETENCION_DIAS:-30}
+      PURGA_INTERVALO_SEGUNDOS: ${PURGA_INTERVALO_SEGUNDOS:-3600}
     depends_on:
       mediciones:
         condition: service_healthy

@@ -82,7 +82,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Crear .env desde el ejemplo
-        run: cp .env.example .env
+        run: |
+          cp .env.example .env
+          # El purgador revisa cada 5 s (en producción, cada hora) para poder comprobarlo en la prueba de humo
+          echo 'PURGA_INTERVALO_SEGUNDOS=5' >> .env
 
       - name: Verificar que los archivos compose son válidos
         run: docker compose -f compose.yaml -f compose.dev.yaml config -q
@@ -119,6 +122,28 @@ jobs:
           # Home sirve Chart.js localmente y con cabeceras de seguridad
           curl -fsS localhost:8080/vendor/chart.umd.min.js > /dev/null
           curl -fsSI localhost:8080/ | grep -qi 'x-content-type-options: nosniff'
+          curl -fsSI localhost:8080/ | grep -qi "content-security-policy:.*style-src 'self';"
+
+          # Retención: una lectura de hace 60 días (RETENCION_DIAS=30) debe desaparecer sola
+          antigua=$(date -u -d '60 days ago' +%Y-%m-%dT%H:%M:%S+00:00)
+          curl -fsS -X POST -u admin:cambiar-admin localhost:8080/mediciones -H 'Content-Type: application/json' \
+            -d "{\"sensor_id\": 1, \"valor\": 55.555, \"unidad\": \"C\", \"timestamp\": \"$antigua\"}"
+          purgada=0
+          for i in $(seq 1 30); do
+            if ! curl -fsS 'localhost:8080/mediciones?sensor_id=1&limit=1000' | grep '55\.555' > /dev/null; then purgada=1; break; fi
+            sleep 2
+          done
+          test "$purgada" = 1
+
+          # Alertas automáticas: una lectura fuera de rango debe generar su alerta sin que nadie pulse "Evaluar"
+          curl -fsS -X POST -u admin:cambiar-admin localhost:8080/mediciones -H 'Content-Type: application/json' \
+            -d '{"sensor_id": 1, "valor": 91.234, "unidad": "C"}'
+          alerta=0
+          for i in $(seq 1 30); do
+            if curl -fsS 'localhost:8080/monitoreo/alertas?limit=200' | grep '91\.234' > /dev/null; then alerta=1; break; fi
+            sleep 2
+          done
+          test "$alerta" = 1
 
       - name: Mostrar logs si algo falló
         if: failure()
