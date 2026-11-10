@@ -1,12 +1,31 @@
 name: CI
 
-# Se dispara en cada Pull Request hacia main.
-# Ampliar más adelante con "push" a main si lo necesitan.
+# Se dispara en cada Pull Request hacia main y en cada push a main.
 on:
   pull_request:
     branches: [ main ]
+  push:
+    branches: [ main ]
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Revisar el código Python
+        run: |
+          pip install ruff==0.17.4
+          ruff check .
+
   pruebas:
     name: Pruebas de ${{ matrix.servicio }}
     runs-on: ubuntu-latest
@@ -30,6 +49,29 @@ jobs:
       - name: Ejecutar pruebas
         working-directory: ${{ matrix.servicio }}
         run: python -m pytest -q
+
+  home:
+    name: Pruebas de navegador del Home
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        working-directory: home/e2e
+        run: npm ci
+
+      - name: Ejecutar pruebas (usa el Chrome del runner)
+        working-directory: home/e2e
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm test
 
   compose:
     name: Stack completo con Docker Compose
@@ -61,7 +103,16 @@ jobs:
           curl -fsS -X POST localhost:8080/mediciones -H 'Content-Type: application/json' \
             -d '{"sensor_id": 1, "valor": 99, "unidad": "C"}'
           curl -fsS localhost:8080/mediciones/estadisticas
-          curl -fsS -X POST localhost:8080/monitoreo/evaluar/1 | grep -q ALERTA_CRITICA
+          # La evaluación responde con su resultado (no se exige ALERTA_CRITICA: el simulador
+          # inserta lecturas en paralelo y la "última lectura" puede ser otra)
+          curl -fsS -X POST localhost:8080/monitoreo/evaluar/1 | grep -q evaluacion
+          curl -fsS "localhost:8080/monitoreo/alertas?limit=5" > /dev/null
+          # Un sensor que no está en el catálogo se rechaza
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/mediciones \
+            -H 'Content-Type: application/json' -d '{"sensor_id": 999, "valor": 1}')" = 400
+          # Home sirve Chart.js localmente y con cabeceras de seguridad
+          curl -fsS localhost:8080/vendor/chart.umd.min.js > /dev/null
+          curl -fsSI localhost:8080/ | grep -qi 'x-content-type-options: nosniff'
 
       - name: Mostrar logs si algo falló
         if: failure()

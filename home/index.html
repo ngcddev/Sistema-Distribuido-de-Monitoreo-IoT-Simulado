@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgroSense - Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="vendor/chart.umd.min.js"></script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -25,10 +26,10 @@
             <div class="menu-section">
                 <h3>GESTIÓN IOT</h3>
                 <nav>
-                    <a href="#" id="menu-general" class="menu-item active">
+                    <a href="#general" id="menu-general" class="menu-item active">
                         <span class="icon"></span> Vista general
                     </a>
-                    <a href="#" id="menu-admin" class="menu-item">
+                    <a href="#administracion" id="menu-admin" class="menu-item">
                         <span class="icon"></span> Administración
                     </a>
                 </nav>
@@ -113,7 +114,7 @@
                         <!-- Monitoreo y Analítica -->
                         <div class="test-section">
                             <h3>Monitoreo de Sensores (Analytics)</h3>
-                            <p>Análisis en tiempo real consumido desde el microservicio <strong>Monitoreo (Puerto 5002)</strong>.</p>
+                            <p>Análisis consumido desde el microservicio <strong>Monitoreo (Puerto 5002)</strong>. El gráfico se actualiza cada 10 s.</p>
 
                             <div class="campos" style="margin-bottom: 15px;">
                                 <label class="campo">
@@ -131,7 +132,7 @@
                             </div>
 
                             <!-- Métricas rápidas -->
-                            <div id="panel-monitoreo" class="action-box" style="text-align: left; font-size: 13px; margin-bottom: 15px;">
+                            <div id="panel-monitoreo" class="action-box" aria-live="polite" style="text-align: left; font-size: 13px; margin-bottom: 15px;">
                                 <p style="text-align: center; color: #6b7280;">Selecciona una opción para consultar las analíticas.</p>
                             </div>
 
@@ -182,8 +183,8 @@
                         <button type="button" id="btn-delete" class="btn-danger">DELETE</button>
                     </div>
                     <p class="hint">El simulador ya crea lecturas con POST. El botón manual sirve para crear una desde aquí. PUT no agrega: reemplaza sensor, valor y unidad de la fila cuyo id escribiste. PATCH cambia solo el valor.</p>
-                    <div id="status" class="status-msg">Estado: En espera...</div>
-                    <div id="resultado" class="resultado"></div>
+                    <div id="status" class="status-msg" role="status" aria-live="polite">Estado: En espera...</div>
+                    <div id="resultado" class="resultado" role="status" aria-live="polite"></div>
                     <div id="lecturas" class="live-block"></div>
                 </div>
             </div>

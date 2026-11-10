@@ -18,6 +18,7 @@ flowchart TD
     H -- "/monitoreo" --> MO["Monitoreo :5002"]
     MO -- "GET /mediciones" --> M
     MO -- "GET /sensores/id" --> S["Sensores :5003"]
+    M -- "GET /sensores/id (valida el sensor)" --> S
     EV[Evaluador] -- "GET /mediciones?desde_id" --> M
     EV -- "GET /sensores/id" --> S
     EV --> DBMO
@@ -32,7 +33,7 @@ flowchart TD
 
 | Componente | Tipo | Puerto | Base de datos |
 |---|---|---|---|
-| Home | Frontend estático + proxy (Nginx) | 8080 → 80 | — |
+| Home | Frontend estático + proxy (Nginx sin privilegios) | 8080 → 8080 | — |
 | Mediciones | Microservicio Flask | 5001 | `mediciones` (en `mysql_mediciones`) |
 | Sensores | Microservicio Flask | 5003 | `sensores` (en `mysql_sensores`) |
 | Monitoreo | Microservicio Flask | 5002 | `monitoreo` (en `mysql_monitoreo`) |
@@ -63,6 +64,7 @@ la red interna (`docker-compose.dev.yml` publica los puertos de las APIs para de
 | Simulador | Mediciones | `POST /mediciones` | `sensor_id`, `valor`, `unidad` | `201` con la medición creada |
 | Monitoreo | Mediciones | `GET /mediciones?sensor_id=X&limit=N` | `sensor_id`, `limit` opcionales | Lista de mediciones en orden cronológico |
 | Monitoreo | Sensores | `GET /sensores/<id>` | `id` del sensor | Sensor con su `tipo` (si falla, el tipo se deduce de la unidad) |
+| Mediciones | Sensores | `GET /sensores/<id>` | `id` del sensor | `200`/`404` (si Sensores no responde, la lectura se acepta) |
 | Home (vía Nginx) | Mediciones | `/mediciones/...` | Petición del navegador | Respuesta JSON de la API |
 | Home (vía Nginx) | Monitoreo | `/monitoreo/...` | Petición del navegador | Respuesta JSON de la API |
 
@@ -78,6 +80,16 @@ la red interna (`docker-compose.dev.yml` publica los puertos de las APIs para de
   su servicio; los servicios no usan `root`.
 - **Consultas acotadas**: Mediciones devuelve por defecto las 100 lecturas más recientes y
   calcula totales y promedios en SQL (`/mediciones/estadisticas`); nadie descarga la tabla completa.
+- **Integridad entre servicios (mejor esfuerzo)**: Mediciones comprueba que el `sensor_id` exista en
+  Sensores. No hay claves foráneas entre bases; si el catálogo no responde, se prefiere no perder la
+  lectura. Las alertas son un registro histórico: guardan su propia copia de `valor` y `timestamp`, por
+  lo que borrar una medición no invalida la alerta que ya generó.
+- **Tiempo en UTC y `DATETIME(3)`**: los `timestamp` se guardan como `DATETIME(3)` en UTC y la API los
+  entrega en ISO 8601. El sensor puede enviar su propia hora (`timestamp` opcional).
+- **Imágenes fijadas y sin root**: MySQL 8.4, nginx 1.28 y Python 3.12; los contenedores Python corren
+  con un usuario sin privilegios y Home usa `nginx-unprivileged`.
+- **Interfaz sin dependencias externas**: Chart.js se sirve desde `home/vendor/` (sin CDN) y Nginx aplica
+  una política de seguridad de contenido restrictiva.
 - **Evaluación automática**: el Evaluador procesa las lecturas nuevas con `desde_id`, en lugar
   de depender de que alguien pulse "Evaluar".
 - **Servicio Sensores independiente**: el catálogo ya no es una lista fija del

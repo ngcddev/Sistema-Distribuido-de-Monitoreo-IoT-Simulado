@@ -48,7 +48,7 @@ El servicio `evaluador` ejecuta `monitoreo/worker.py`: al arrancar toma como pun
 | Base | Tabla | Columnas |
 |---|---|---|
 | `monitoreo` | `umbrales` | `id` (PK), `tipo` VARCHAR(30) único, `minimo` DOUBLE, `maximo` DOUBLE, `unidad` VARCHAR(10) |
-| `monitoreo` | `alertas` | `id` (PK), `medicion_id` INT único, `sensor_id` VARCHAR(50), `tipo`, `valor` DOUBLE, `estado`, `detalle`, `timestamp` |
+| `monitoreo` | `alertas` | `id` (PK), `medicion_id` INT único, `sensor_id` VARCHAR(50), `tipo`, `valor` DOUBLE, `estado`, `detalle`, `timestamp` DATETIME(3) en UTC |
 
 Umbrales iniciales: temperatura 10–35 °C y humedad 30–80 %. Script de referencia: [`bases_datos/monitoreo.sql`](../../bases_datos/monitoreo.sql).
 

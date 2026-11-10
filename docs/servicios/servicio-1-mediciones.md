@@ -19,7 +19,7 @@ API REST (Flask) que recibe, almacena, consulta, modifica y elimina las lecturas
 | Método | Ruta | Descripción | Respuestas |
 |---|---|---|---|
 | GET | `/health` | Comprueba el servicio y la conexión a la BD | `200`, `503` |
-| POST | `/mediciones` | Registra una medición (`sensor_id`, `valor` obligatorios; `unidad` opcional) | `201`, `400` |
+| POST | `/mediciones` | Registra una medición (`sensor_id`, `valor` obligatorios; `unidad` y `timestamp` opcionales) | `201`, `400` |
 | GET | `/mediciones` | Las N mediciones más recientes en orden cronológico (por defecto 100, máx. 1000; la cabecera `X-Limite` indica el límite aplicado). Filtros: `sensor_id`, `id`, `limit`, `desde_id` (solo las de id mayor) | `200`, `400` |
 | GET | `/mediciones/estadisticas` | `total`, lista de `sensores` y `por_unidad` (`unidad`, `total`, `promedio`), calculados en SQL. Con `sensor_id` añade `promedio` del sensor | `200` |
 | GET | `/mediciones/<id>` | Obtiene una medición por identificador | `200`, `404` |
@@ -28,7 +28,7 @@ API REST (Flask) que recibe, almacena, consulta, modifica y elimina las lecturas
 | PATCH | `/mediciones/<id>` | Actualiza `valor` y/o `unidad` | `200`, `400`, `404` |
 | DELETE | `/mediciones/<id>` | Elimina una medición | `200`, `404` |
 
-Validaciones: `valor` debe ser numérico (no booleano), `sensor_id` entero o texto de 1 a 50 caracteres y `unidad` texto de máximo 10 caracteres. El `timestamp` lo asigna el servicio (UTC, ISO 8601). Si la BD no está disponible responde `503`.
+Validaciones: `valor` debe ser numérico (no booleano), `sensor_id` entero o texto de 1 a 50 caracteres y `unidad` texto de máximo 10 caracteres. `timestamp` (opcional) debe ser texto ISO 8601 posterior a 1970; se normaliza a UTC y, si falta, lo asigna el servicio con la hora actual. Si `SENSORES_URL` está definida, el `sensor_id` debe existir en el catálogo de Sensores (`400` si no existe o no es numérico); si Sensores no responde la lectura **no se bloquea**. Errores de conexión a la BD responden `503`; otros errores de la base, `500` (la causa queda en el log).
 
 **Ejemplo `POST /mediciones`:**
 
@@ -49,7 +49,7 @@ Validaciones: `valor` debe ser numérico (no booleano), `sensor_id` entero o tex
 
 | Base | Tabla | Columnas |
 |---|---|---|
-| `mediciones` | `mediciones` | `id` (PK, autoincremental), `sensor_id` VARCHAR(50) con índice, `valor` DOUBLE, `unidad` VARCHAR(10), `timestamp` VARCHAR(40) |
+| `mediciones` | `mediciones` | `id` (PK, autoincremental), `sensor_id` VARCHAR(50) con índice, `valor` DOUBLE, `unidad` VARCHAR(10), `timestamp` DATETIME(3) en UTC con índice |
 
 Script de referencia: [`bases_datos/mediciones.sql`](../../bases_datos/mediciones.sql). El servicio crea la base y la tabla al arrancar.
 
@@ -62,6 +62,7 @@ Script de referencia: [`bases_datos/mediciones.sql`](../../bases_datos/medicione
 | `DB_USER` | Usuario de MySQL con permisos sobre su base | `DB_USER` del `.env` |
 | `DB_PASSWORD` | Contraseña de MySQL | `DB_PASSWORD` del `.env` |
 | `DB_NAME` | Nombre de la base | `mediciones` |
+| `SENSORES_URL` | URL de Sensores para validar `sensor_id` (opcional; sin ella no se valida) | `http://sensores:5003` |
 
 ## Comunicación
 
@@ -72,6 +73,7 @@ Script de referencia: [`bases_datos/mediciones.sql`](../../bases_datos/medicione
 | Monitoreo | Mediciones | `GET /mediciones?sensor_id=X&limit=N` | `sensor_id`, `limit` | Lista de mediciones |
 | Monitoreo | Mediciones | `GET /mediciones/estadisticas[?sensor_id=X]` | `sensor_id` opcional | `total`, `sensores`, `por_unidad` (y `promedio` si hay `sensor_id`) |
 | Evaluador | Mediciones | `GET /mediciones?desde_id=N&limit=1000` | último id evaluado | Lecturas nuevas |
+| Mediciones | Sensores | `GET /sensores/<id>` | id del sensor | `200` si existe, `404` si no |
 | Home (Nginx) | Mediciones | `/mediciones/...` | Petición del navegador | JSON de la API |
 
 ## Ejecución

@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function consultarTotal() {
-        marcarEstado('Consultando todas las mediciones...', '#d97706');
+        marcarEstado('Consultando todas las mediciones...', '#b45309');
         try {
             const [respuesta, respuestaTotal] = await Promise.all([
                 fetch('/mediciones?limit=8'),
@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lecturas.innerHTML = 'Total: ' + escapar(estadisticas.total) + ' lecturas. Últimas ' + recientes.length + ':<br>' +
                 recientes.map(textoFila).join('<br>');
             resultado.textContent = '';
-            marcarEstado('GET total ' + respuesta.status, '#10b981');
+            marcarEstado('GET total ' + respuesta.status, '#047857');
         } catch (error) {
             marcarEstado(error.message, '#b91c1c');
         }
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             marcarEstado(resultado.textContent, '#b91c1c');
             return;
         }
-        marcarEstado('Consultando la fila ' + filaId + '...', '#d97706');
+        marcarEstado('Consultando la fila ' + filaId + '...', '#b45309');
         try {
             const respuesta = await fetch('/mediciones/' + encodeURIComponent(filaId));
             const data = await respuesta.json().catch(function () { return {}; });
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
             llenarCampos(data);
             resultado.textContent = textoResultado('GET', data);
             lecturas.innerHTML = '<strong>' + textoFila(data) + ' ← esta fila</strong>';
-            marcarEstado('GET por id ' + respuesta.status, '#10b981');
+            marcarEstado('GET por id ' + respuesta.status, '#047857');
         } catch (error) {
             marcarEstado(error.message, '#b91c1c');
         }
@@ -174,33 +174,44 @@ document.addEventListener('DOMContentLoaded', () => {
             opciones.body = JSON.stringify({ valor: Number(valorInput.value) });
         }
 
-        const url = method === 'POST' ? '/mediciones' : '/mediciones/' + filaId;
-        marcarEstado(method + ' hacia Mediciones...', '#d97706');
-        const respuesta = await fetch(url, opciones);
-        const data = await respuesta.json().catch(function () { return {}; });
-        if (!respuesta.ok) {
-            resultado.textContent = data.error || (method + ' respondió ' + respuesta.status);
-            marcarEstado(resultado.textContent, '#b91c1c');
+        if (method === 'DELETE' && !window.confirm('¿Eliminar la fila ' + filaId + '? Esta acción no se puede deshacer.')) {
+            marcarEstado('Eliminación cancelada.', '#4b5563');
             return;
         }
-        llenarCampos(data);
-        resultado.textContent = textoResultado(method, data);
-        if (method === 'DELETE') {
-            lecturas.textContent = 'La fila ' + data.id + ' ya no está.';
-        } else if (data.id !== undefined) {
-            lecturas.innerHTML = '<strong>' + textoFila(data) + ' ← esta fila</strong>';
+
+        const url = method === 'POST' ? '/mediciones' : '/mediciones/' + encodeURIComponent(filaId);
+        marcarEstado(method + ' hacia Mediciones...', '#b45309');
+        try {
+            const respuesta = await fetch(url, opciones);
+            const data = await respuesta.json().catch(function () { return {}; });
+            if (!respuesta.ok) {
+                resultado.textContent = data.error || (method + ' respondió ' + respuesta.status);
+                marcarEstado(resultado.textContent, '#b91c1c');
+                return;
+            }
+            llenarCampos(data);
+            resultado.textContent = textoResultado(method, data);
+            if (method === 'DELETE') {
+                lecturas.textContent = 'La fila ' + data.id + ' ya no está.';
+            } else if (data.id !== undefined) {
+                lecturas.innerHTML = '<strong>' + textoFila(data) + ' ← esta fila</strong>';
+            }
+            marcarEstado(method + ' ' + respuesta.status, '#047857');
+        } catch (error) {
+            resultado.textContent = 'No se pudo conectar con Mediciones: ' + error.message;
+            marcarEstado(resultado.textContent, '#b91c1c');
         }
-        marcarEstado(method + ' ' + respuesta.status, '#10b981');
     }
 
-    menuGeneral.addEventListener('click', function (event) {
-        event.preventDefault();
-        mostrarGeneral();
-    });
-    menuAdmin.addEventListener('click', function (event) {
-        event.preventDefault();
-        mostrarAdmin();
-    });
+    // La vista activa vive en la URL (#administracion); los enlaces del menú son enlaces reales.
+    function aplicarVistaDesdeHash() {
+        if (window.location.hash === '#administracion') {
+            mostrarAdmin();
+        } else {
+            mostrarGeneral();
+        }
+    }
+    window.addEventListener('hashchange', aplicarVistaDesdeHash);
     document.getElementById('btn-get-total').addEventListener('click', consultarTotal);
     document.getElementById('btn-get-id').addEventListener('click', consultarPorId);
     document.getElementById('btn-post').addEventListener('click', function () { enviarMedicion('POST'); });
@@ -221,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canvas) return;
 
         try {
-            if (typeof Chart === 'undefined') return; // Chart.js no cargó (sin conexión al CDN)
+            if (typeof Chart === 'undefined') return; // vendor/chart.umd.min.js no cargó
             const respuesta = await fetch('/mediciones?sensor_id=' + encodeURIComponent(sensorId) + '&limit=10');
             if (!respuesta.ok) return;
             const lecturasSensor = await respuesta.json();
@@ -328,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const esAlerta = data.evaluacion === 'ALERTA_CRITICA';
-            const colorEstado = esAlerta ? '#b91c1c' : '#10b981';
+            const colorEstado = esAlerta ? '#b91c1c' : '#047857';
 
             panelMonitoreo.innerHTML = `
                 <strong style="color: ${colorEstado};">--- Evaluación: ${escapar(data.evaluacion)} ---</strong><br>
@@ -382,4 +393,14 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-resumen-general')?.addEventListener('click', consultarResumenGeneral);
     document.getElementById('btn-resumen-sensor')?.addEventListener('click', consultarResumenSensor);
     document.getElementById('btn-evaluar-sensor')?.addEventListener('click', evaluarSensor);
+
+    // El gráfico se refresca solo (cada 10 s) mientras se vea la vista general y la pestaña esté activa.
+    const INTERVALO_GRAFICO_MS = 10000;
+    setInterval(function () {
+        if (miGrafico && !document.hidden && !vistaGeneral.classList.contains('vista-oculta')) {
+            actualizarGraficoSensor();
+        }
+    }, INTERVALO_GRAFICO_MS);
+
+    aplicarVistaDesdeHash();
 });

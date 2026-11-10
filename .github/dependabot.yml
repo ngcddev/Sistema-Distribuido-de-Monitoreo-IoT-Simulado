@@ -1,0 +1,24 @@
+# Abre PRs automáticos cuando hay versiones nuevas (o parches de seguridad) de las dependencias.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /mediciones
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /monitoreo
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /sensores
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /simulador
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /mediciones
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /home
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

@@ -1,4 +1,8 @@
+import os
 import sys
+
+# Este archivo se carga antes que la app: garantiza que `database` se pueda importar.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 bind = '0.0.0.0:5002'
 workers = 2

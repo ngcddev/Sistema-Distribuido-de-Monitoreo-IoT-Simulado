@@ -31,7 +31,7 @@ vista Home como punto de entrada del usuario.
 
 Arquitectura de **microservicios** con estilo cliente–servidor. Cada servicio con
 persistencia tiene su **propia base MySQL**; los servicios se comunican por
-**HTTP/REST con JSON** dentro de la red `red_iot` de Docker Compose. El usuario entra
+**HTTP/REST con JSON** dentro de la red interna de Docker Compose. El usuario entra
 por Home (Nginx), que sirve la interfaz y actúa como proxy hacia las APIs.
 
 ```mermaid
@@ -41,6 +41,7 @@ flowchart TD
     H -- "/monitoreo" --> MO["Monitoreo :5002"]
     MO -- "GET /mediciones" --> M
     MO -- "GET /sensores/id" --> S["Sensores :5003"]
+    M -- "GET /sensores/id (valida el sensor)" --> S
     EV[Evaluador] -- "GET /mediciones?desde_id" --> M
     EV -- "GET /sensores/id" --> S
     EV --> DBMO
@@ -57,8 +58,8 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 
 | Servicio | Responsabilidad | Puerto | Se comunica con | Documentación |
 |---|---|---|---|---|
-| **Home** | Interfaz web (Nginx) y proxy hacia `/mediciones` y `/monitoreo` | `8080` → 80 | Mediciones, Monitoreo | [servicio-4-home](docs/servicios/servicio-4-home.md) |
-| **Mediciones** | Registrar y consultar lecturas | `5001` | MySQL propio | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
+| **Home** | Interfaz web (Nginx) y proxy hacia `/mediciones` y `/monitoreo` | `8080` | Mediciones, Monitoreo | [servicio-4-home](docs/servicios/servicio-4-home.md) |
+| **Mediciones** | Registrar y consultar lecturas | `5001` | Sensores (validación), MySQL propio | [servicio-1-mediciones](docs/servicios/servicio-1-mediciones.md) |
 | **Monitoreo** | Resúmenes, umbrales y alertas | `5002` | Mediciones, Sensores, MySQL propio | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
 | **Sensores** | Catálogo de sensores | `5003` | MySQL propio | [servicio-sensores](docs/servicios/servicio-sensores.md) |
 | **Evaluador** | Evaluar automáticamente las lecturas nuevas y registrar alertas (mismo código que Monitoreo, sin API) | — | Mediciones, Sensores, MySQL de Monitoreo | [servicio-2-monitoreo](docs/servicios/servicio-2-monitoreo.md) |
@@ -71,7 +72,7 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/health` | Estado del servicio y de la BD |
-| POST | `/mediciones` | Registrar una medición |
+| POST | `/mediciones` | Registrar una medición (`timestamp` ISO 8601 opcional; rechaza sensores que no estén en el catálogo) |
 | GET | `/mediciones` | Las N más recientes (por defecto 100, máx. 1000; la cabecera `X-Limite` indica el límite aplicado). Filtros `sensor_id`, `id`, `limit`, `desde_id` |
 | GET | `/mediciones/estadisticas` | Total, sensores con lecturas y promedio por unidad (SQL). Filtro `sensor_id` (añade `promedio` del sensor) |
 | GET | `/mediciones/<id>` | Obtener una medición |
@@ -105,7 +106,7 @@ Detalle completo en [docs/arquitectura/ARCHITECTURE.md](docs/arquitectura/ARCHIT
 
 ## Bases de datos
 
-Tres instancias MySQL 8.0 independientes, cada una con su volumen. MySQL crea en cada
+Tres instancias MySQL 8.4 independientes, cada una con su volumen. MySQL crea en cada
 una la base del servicio y un usuario (`DB_USER`) con permisos **solo sobre esa base**; los
 servicios no usan `root`. Los servicios crean sus tablas al arrancar. Scripts de
 referencia en [bases_datos/](bases_datos/).
@@ -168,7 +169,11 @@ curl -X POST localhost:5002/monitoreo/evaluar/1
 
 `MYSQL_USER` y `MYSQL_PASSWORD` solo se aplican cuando el volumen de MySQL está vacío. Si ya
 levantaste el sistema antes (por ejemplo con `root`/`root`), debes recrear los volúmenes
-con `docker compose down -v`, lo que **borra los datos**.
+con `docker compose down -v`, lo que **borra los datos**. Lo mismo ocurre con el cambio de
+`timestamp` de texto a `DATETIME(3)`: las tablas existentes no se migran.
+
+MySQL 8.4 sustituye a 8.0 (que dejó de recibir soporte). Un volumen de 8.0 se puede actualizar
+en sitio, pero conviene hacer una copia antes.
 
 Apagar (con `-v` también borra los datos de las bases):
 
@@ -181,18 +186,32 @@ docker compose down -v
 
 El workflow de GitHub Actions, en cada Pull Request hacia `main`:
 
-1. Ejecuta las pruebas de `mediciones`, `monitoreo` y `sensores` (`pytest`).
-2. Levanta el stack completo con `docker compose up --wait` (respeta los healthchecks) y
+1. Revisa el código Python con `ruff` (reglas mínimas, ver `ruff.toml`).
+2. Ejecuta las pruebas de `mediciones`, `monitoreo` y `sensores` (`pytest`).
+3. Ejecuta las pruebas de navegador del Home (`home/e2e`, sin Docker).
+4. Levanta el stack completo con `docker compose up --wait` (respeta los healthchecks) y
    ejecuta una prueba de humo contra las APIs y el proxy de Home.
 
-Pruebas en local: `pip install -r <servicio>/requirements.txt -r requirements-dev.txt` y luego
-`cd <servicio> && python -m pytest`.
+Pruebas en local (no necesitan Docker):
+
+```bash
+# APIs (BD simulada)
+pip install -r <servicio>/requirements.txt -r requirements-dev.txt
+cd <servicio> && python -m pytest
+
+# Home en un navegador real (usa el Chrome instalado; CHROME_PATH para indicar otro)
+cd home/e2e && npm install && npm test
+```
+
+Las pruebas del Home sirven la interfaz con las mismas cabeceras de seguridad que `nginx.conf`
+(las leen de ese archivo) y simulan las APIs, de modo que comprueban también la CSP.
 
 ## Estructura del repositorio
 
 ```
 .
-├── home/            # Interfaz (HTML/CSS/JS) + nginx.conf + Dockerfile
+├── home/            # Interfaz (HTML/CSS/JS, Chart.js en vendor/) + nginx.conf + Dockerfile
+│   └── e2e/         # Pruebas de navegador del Home (Node + Chrome)
 ├── mediciones/      # Microservicio Mediciones (Flask)
 ├── sensores/        # Microservicio Sensores (Flask)
 ├── monitoreo/       # Microservicio Monitoreo (Flask)
@@ -202,10 +221,13 @@ Pruebas en local: `pip install -r <servicio>/requirements.txt -r requirements-de
 ├── docker-compose.yml       # Stack (solo publica Home)
 ├── docker-compose.dev.yml   # Publica los puertos de las APIs (desarrollo)
 ├── requirements-dev.txt     # Dependencias de las pruebas
+├── ruff.toml                # Configuración del lint
 └── .env.example
 ```
 
 ## Pendiente
+
+El estado de la auditoría y lo que requiere supervisión está en [docs/seguimiento-auditoria.md](docs/seguimiento-auditoria.md).
 
 - Servicio de Notificaciones que consuma las alertas.
 - Autenticación, seguridad y despliegue en la nube.

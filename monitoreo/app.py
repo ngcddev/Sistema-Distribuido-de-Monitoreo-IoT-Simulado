@@ -1,6 +1,7 @@
 import os
 import sys
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import mysql.connector
 import requests
@@ -15,6 +16,9 @@ SENSORES_URL = os.environ.get('SENSORES_URL', 'http://localhost:5003')
 
 # Si el servicio Sensores no responde, el tipo se deduce de la unidad de la lectura.
 TIPO_POR_UNIDAD = {'C': 'temperatura', '%': 'humedad'}
+
+# Códigos de MySQL/cliente que indican que no hay conexión (el resto son errores de la consulta).
+ERRNOS_CONEXION = {1040, 2002, 2003, 2006, 2013, 2055}
 
 
 @contextmanager
@@ -39,8 +43,29 @@ def error_integridad(_err):
 
 
 @app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+def error_base_datos(err):
+    app.logger.error('Error de base de datos: %s', err, exc_info=err)
+    if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
+        return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+    return jsonify({'error': 'error interno de la base de datos'}), 500
+
+
+def a_iso(momento):
+    """datetime sin zona (UTC, como lo guarda MySQL) -> texto ISO 8601 con +00:00."""
+    return momento.replace(tzinfo=timezone.utc).isoformat()
+
+
+def a_datetime_utc(texto):
+    """Texto ISO 8601 -> datetime UTC sin zona para MySQL; None si falta o no es válido."""
+    if not texto:
+        return None
+    try:
+        momento = datetime.fromisoformat(texto)
+    except (TypeError, ValueError):
+        return None
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    return momento
 
 
 class MedicionesNoDisponible(Exception):
@@ -180,7 +205,7 @@ def eliminar_umbral(umbral_id):
 def listar_alertas():
     """Alertas generadas al evaluar sensores. Filtros: ?sensor_id= , ?limit= (por defecto 50)."""
     limite = request.args.get('limit', '50')
-    if not limite.isdigit() or int(limite) < 1:
+    if not limite.isascii() or not limite.isdigit() or int(limite) < 1:
         return jsonify({'error': 'limit debe ser un entero positivo'}), 400
 
     consulta, parametros = 'SELECT * FROM alertas', []
@@ -194,6 +219,9 @@ def listar_alertas():
     with cursor_bd() as cursor:
         cursor.execute(consulta, parametros)
         filas = cursor.fetchall()
+    for fila in filas:
+        if isinstance(fila.get('timestamp'), datetime):
+            fila['timestamp'] = a_iso(fila['timestamp'])
     return jsonify(filas), 200
 
 
@@ -261,7 +289,8 @@ def evaluar_lectura(sensor_id, lectura, registrar=True):
             cursor.execute(
                 'INSERT IGNORE INTO alertas (medicion_id, sensor_id, tipo, valor, estado, detalle, timestamp) '
                 'VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                (lectura['id'], str(sensor_id), tipo, valor, estado, detalle, lectura.get('timestamp')),
+                (lectura['id'], str(sensor_id), tipo, valor, estado, detalle,
+                 a_datetime_utc(lectura.get('timestamp'))),
             )
             registrada = True
 

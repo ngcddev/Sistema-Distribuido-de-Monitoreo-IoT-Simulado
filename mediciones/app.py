@@ -1,8 +1,10 @@
+import os
 import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import mysql.connector
+import requests
 from flask import Flask, jsonify, request
 
 from database import conectar, inicializar
@@ -11,6 +13,12 @@ app = Flask(__name__)
 
 LIMITE_MAXIMO = 1000
 LIMITE_POR_DEFECTO = 100
+
+# Si está definida, Mediciones comprueba que el sensor exista en el servicio Sensores.
+SENSORES_URL = os.environ.get('SENSORES_URL')
+
+# Códigos de MySQL/cliente que indican que no hay conexión (el resto son errores de la consulta).
+ERRNOS_CONEXION = {1040, 2002, 2003, 2006, 2013, 2055}
 
 
 @contextmanager
@@ -30,8 +38,66 @@ def cursor_bd(commit=False):
 
 
 @app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+def error_base_datos(err):
+    app.logger.error('Error de base de datos: %s', err, exc_info=err)
+    if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
+        return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+    return jsonify({'error': 'error interno de la base de datos'}), 500
+
+
+def a_iso(momento):
+    """datetime sin zona (UTC, como lo guarda MySQL) -> texto ISO 8601 con +00:00."""
+    return momento.replace(tzinfo=timezone.utc).isoformat()
+
+
+def serializar(fila):
+    """Convierte el timestamp de una fila a ISO 8601 para la respuesta JSON."""
+    if isinstance(fila.get('timestamp'), datetime):
+        fila['timestamp'] = a_iso(fila['timestamp'])
+    return fila
+
+
+def leer_timestamp(valor):
+    """Devuelve (datetime UTC sin zona, error). Sin valor usa la hora actual."""
+    if valor is None:
+        return datetime.now(timezone.utc).replace(tzinfo=None), None
+    if not isinstance(valor, str):
+        return None, 'timestamp debe ser texto ISO 8601'
+    try:
+        momento = datetime.fromisoformat(valor)
+    except ValueError:
+        return None, 'timestamp debe tener formato ISO 8601'
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    if momento.year < 1970:
+        return None, 'timestamp debe ser posterior a 1970'
+    return momento, None
+
+
+def sensor_existe(sensor_id):
+    """True/False según el catálogo de Sensores; None si no se puede comprobar.
+
+    Si Sensores no responde (o la validación está desactivada) no se bloquea la lectura:
+    un sensor real no debe perder datos porque el catálogo esté caído.
+    """
+    if not SENSORES_URL:
+        return None
+    if not sensor_id.isascii() or not sensor_id.isdigit():
+        return False
+    try:
+        respuesta = requests.get(f'{SENSORES_URL}/sensores/{int(sensor_id)}', timeout=2)
+    except requests.exceptions.RequestException:
+        return None
+    if respuesta.status_code == 404:
+        return False
+    return True if respuesta.status_code == 200 else None
+
+
+def error_sensor_desconocido(sensor_id):
+    """Respuesta 400 si el sensor no está en el catálogo; None en cualquier otro caso."""
+    if sensor_existe(sensor_id) is False:
+        return jsonify({'error': f'el sensor {sensor_id} no existe en el catálogo de Sensores'}), 400
+    return None
 
 
 def a_numero(valor):
@@ -94,12 +160,17 @@ def crear_medicion():
         return jsonify({'error': 'valor debe ser numérico'}), 400
     if not unidad_ok:
         return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
+    momento, error = leer_timestamp(data.get('timestamp'))
+    if error:
+        return jsonify({'error': error}), 400
+    desconocido = error_sensor_desconocido(sensor_id)
+    if desconocido:
+        return desconocido
 
-    timestamp = datetime.now(timezone.utc).isoformat()
     with cursor_bd(commit=True) as cursor:
         cursor.execute(
             'INSERT INTO mediciones (sensor_id, valor, unidad, timestamp) VALUES (%s, %s, %s, %s)',
-            (sensor_id, valor, unidad, timestamp),
+            (sensor_id, valor, unidad, momento),
         )
         nuevo_id = cursor.lastrowid
 
@@ -108,7 +179,7 @@ def crear_medicion():
         'sensor_id': sensor_id,
         'valor': valor,
         'unidad': unidad,
-        'timestamp': timestamp,
+        'timestamp': a_iso(momento),
     }), 201
 
 
@@ -120,7 +191,7 @@ def ultimas_mediciones(condiciones, parametros, limite):
     consulta = f'SELECT * FROM ({consulta} ORDER BY id DESC LIMIT %s) ultimas ORDER BY id'
     with cursor_bd() as cursor:
         cursor.execute(consulta, [*parametros, limite])
-        return cursor.fetchall()
+        return [serializar(fila) for fila in cursor.fetchall()]
 
 
 def leer_limite():
@@ -214,7 +285,7 @@ def obtener_medicion(medicion_id):
         fila = cursor.fetchone()
     if not fila:
         return jsonify({'error': 'medicion no encontrada'}), 404
-    return jsonify(fila), 200
+    return jsonify(serializar(fila)), 200
 
 
 @app.route('/mediciones/sensor/<sensor_id>', methods=['GET'])
@@ -240,6 +311,9 @@ def reemplazar_medicion(medicion_id):
         return jsonify({'error': 'valor debe ser numérico'}), 400
     if not unidad_ok:
         return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
+    desconocido = error_sensor_desconocido(sensor_id)
+    if desconocido:
+        return desconocido
 
     with cursor_bd(commit=True) as cursor:
         cursor.execute(

@@ -2,7 +2,7 @@
 # Para exponer los puertos de las APIs en desarrollo: docker-compose.dev.yml (ver README).
 
 x-mysql: &mysql
-  image: mysql:8.0
+  image: mysql:8.4
   restart: unless-stopped
   healthcheck:
     test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
@@ -54,8 +54,11 @@ services:
       <<: *api-env
       DB_HOST: mysql_mediciones
       DB_NAME: mediciones
+      SENSORES_URL: http://sensores:5003  # valida que el sensor exista; si Sensores cae, no bloquea
     depends_on:
       mysql_mediciones:
+        condition: service_healthy
+      sensores:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health', timeout=2)"]
@@ -137,14 +140,14 @@ services:
     build: ./home
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8080:8080"  # nginx-unprivileged escucha en 8080 dentro del contenedor
     depends_on:
       mediciones:
         condition: service_healthy
       monitoreo:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
       interval: 10s
       timeout: 3s
       retries: 3
