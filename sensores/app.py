@@ -1,3 +1,4 @@
+import sys
 from contextlib import contextmanager
 
 import mysql.connector
@@ -26,9 +27,16 @@ def cursor_bd(commit=False):
         conexion.close()
 
 
+# Códigos de MySQL/cliente que indican que no hay conexión (el resto son errores de la consulta).
+ERRNOS_CONEXION = {1040, 2002, 2003, 2006, 2013, 2055}
+
+
 @app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+def error_base_datos(err):
+    app.logger.error('Error de base de datos: %s', err, exc_info=err)
+    if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
+        return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+    return jsonify({'error': 'error interno de la base de datos'}), 500
 
 
 def serializar(fila):
@@ -163,5 +171,7 @@ def eliminar_sensor(sensor_id):
 
 
 if __name__ == '__main__':
-    inicializar()
+    # Solo para desarrollo local; en el contenedor se ejecuta con gunicorn (ver gunicorn_conf.py).
+    if not inicializar():
+        sys.exit('[sensores] no se pudo preparar la base de datos')
     app.run(host='0.0.0.0', port=5003)

@@ -1,9 +1,13 @@
+import logging
 import os
 import re
 import time
 
 import mysql.connector
 from mysql.connector.constants import ClientFlag
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
+logger = logging.getLogger('sensores')
 
 TABLA_SENSORES = """
 CREATE TABLE IF NOT EXISTS sensores (
@@ -54,8 +58,9 @@ def inicializar(intentos=30, espera=2):
                 cursor = conexion.cursor()
                 try:
                     cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{nombre}`")
-                except mysql.connector.Error:
-                    pass  # sin permiso de CREATE: se asume que la BD ya existe
+                except mysql.connector.Error as err:
+                    # Sin permiso de CREATE se asume que la BD ya existe (MySQL la crea con MYSQL_DATABASE).
+                    logger.debug('CREATE DATABASE omitido: %s', err)
                 cursor.execute(f"USE `{nombre}`")
                 cursor.execute(TABLA_SENSORES)
                 cursor.execute("SELECT COUNT(*) FROM sensores")
@@ -68,9 +73,9 @@ def inicializar(intentos=30, espera=2):
                 cursor.close()
             finally:
                 conexion.close()
-            print('[sensores] base de datos lista')
+            logger.info('base de datos lista')
             return True
         except mysql.connector.Error as err:
-            print(f'[sensores] esperando a MySQL ({intento}/{intentos}): {err}')
+            logger.warning('esperando a MySQL (%s/%s): %s', intento, intentos, err)
             time.sleep(espera)
     return False

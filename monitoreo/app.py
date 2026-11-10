@@ -1,5 +1,7 @@
 import os
+import sys
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import mysql.connector
 import requests
@@ -14,6 +16,9 @@ SENSORES_URL = os.environ.get('SENSORES_URL', 'http://localhost:5003')
 
 # Si el servicio Sensores no responde, el tipo se deduce de la unidad de la lectura.
 TIPO_POR_UNIDAD = {'C': 'temperatura', '%': 'humedad'}
+
+# Códigos de MySQL/cliente que indican que no hay conexión (el resto son errores de la consulta).
+ERRNOS_CONEXION = {1040, 2002, 2003, 2006, 2013, 2055}
 
 
 @contextmanager
@@ -38,18 +43,39 @@ def error_integridad(_err):
 
 
 @app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+def error_base_datos(err):
+    app.logger.error('Error de base de datos: %s', err, exc_info=err)
+    if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
+        return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
+    return jsonify({'error': 'error interno de la base de datos'}), 500
+
+
+def a_iso(momento):
+    """datetime sin zona (UTC, como lo guarda MySQL) -> texto ISO 8601 con +00:00."""
+    return momento.replace(tzinfo=timezone.utc).isoformat()
+
+
+def a_datetime_utc(texto):
+    """Texto ISO 8601 -> datetime UTC sin zona para MySQL; None si falta o no es válido."""
+    if not texto:
+        return None
+    try:
+        momento = datetime.fromisoformat(texto)
+    except (TypeError, ValueError):
+        return None
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(timezone.utc).replace(tzinfo=None)
+    return momento
 
 
 class MedicionesNoDisponible(Exception):
     pass
 
 
-def consultar_mediciones(**params):
-    """Consulta GET /mediciones del servicio Mediciones; lanza MedicionesNoDisponible si falla."""
+def consultar_mediciones(ruta='/mediciones', **params):
+    """Consulta GET <ruta> del servicio Mediciones; lanza MedicionesNoDisponible si falla."""
     try:
-        respuesta = requests.get(f'{MEDICIONES_URL}/mediciones', params=params, timeout=3)
+        respuesta = requests.get(f'{MEDICIONES_URL}{ruta}', params=params, timeout=3)
     except requests.exceptions.Timeout:
         raise MedicionesNoDisponible('el servicio de Mediciones no respondió a tiempo')
     except requests.exceptions.RequestException:
@@ -179,7 +205,7 @@ def eliminar_umbral(umbral_id):
 def listar_alertas():
     """Alertas generadas al evaluar sensores. Filtros: ?sensor_id= , ?limit= (por defecto 50)."""
     limite = request.args.get('limit', '50')
-    if not limite.isdigit() or int(limite) < 1:
+    if not limite.isascii() or not limite.isdigit() or int(limite) < 1:
         return jsonify({'error': 'limit debe ser un entero positivo'}), 400
 
     consulta, parametros = 'SELECT * FROM alertas', []
@@ -193,6 +219,9 @@ def listar_alertas():
     with cursor_bd() as cursor:
         cursor.execute(consulta, parametros)
         filas = cursor.fetchall()
+    for fila in filas:
+        if isinstance(fila.get('timestamp'), datetime):
+            fila['timestamp'] = a_iso(fila['timestamp'])
     return jsonify(filas), 200
 
 
@@ -210,83 +239,104 @@ def eliminar_alerta(alerta_id):
 
 @app.route('/monitoreo/resumen-general', methods=['GET'])
 def resumen_general():
-    """Métricas globales de todos los sensores."""
-    lecturas = consultar_mediciones()
-    if not lecturas:
+    """Métricas globales de todos los sensores (calculadas por Mediciones en SQL)."""
+    estadisticas = consultar_mediciones('/mediciones/estadisticas')
+    if not estadisticas['total']:
         return jsonify({'mensaje': 'No hay lecturas registradas en la red'}), 200
 
-    sensores = sorted({str(l['sensor_id']) for l in lecturas})
-    valores = [float(l['valor']) for l in lecturas]
+    sensores = [str(sensor) for sensor in estadisticas['sensores']]
     return jsonify({
-        'total_lecturas_sistema': len(lecturas),
+        'total_lecturas_sistema': estadisticas['total'],
         'total_sensores_activos': len(sensores),
         'listado_sensores': sensores,
-        'promedio_global_sistema': round(sum(valores) / len(valores), 2),
+        # Un promedio por unidad: promediar °C con % no tiene sentido.
+        'promedios_por_unidad': {
+            (grupo['unidad'] or 'sin unidad'): grupo['promedio'] for grupo in estadisticas['por_unidad']
+        },
     }), 200
 
 
-@app.route('/monitoreo/evaluar/<sensor_id>', methods=['GET'])
-def evaluar_sensor(sensor_id):
-    """Compara la última lectura del sensor con el umbral de su tipo y registra la alerta."""
-    lecturas = consultar_mediciones(sensor_id=sensor_id, limit=1)
-    if not lecturas:
-        return jsonify({'mensaje': f'Sin datos para evaluar el sensor {sensor_id}'}), 404
+def clasificar(valor, unidad, tipo, umbral):
+    """Devuelve (estado, detalle) de una lectura frente al umbral de su tipo (umbral puede ser None)."""
+    if umbral is None:
+        return 'SIN_UMBRAL', f'No hay umbral configurado para el tipo "{tipo}".'
+    if valor > umbral['maximo']:
+        return 'ALERTA_CRITICA', f"El valor {valor} {unidad} supera el límite máximo permitido ({umbral['maximo']})."
+    if valor < umbral['minimo']:
+        return 'ALERTA_CRITICA', f"El valor {valor} {unidad} está por debajo del límite mínimo permitido ({umbral['minimo']})."
+    return 'NORMAL', 'El valor se encuentra dentro del rango operativo seguro.'
 
-    ultima = lecturas[-1]
-    valor = float(ultima['valor'])
-    unidad = ultima.get('unidad') or ''
-    tipo = tipo_de_sensor(sensor_id, ultima)
+
+def evaluar_lectura(sensor_id, lectura, registrar=True):
+    """Compara una lectura con el umbral de su tipo y, si está fuera de rango, registra la alerta.
+
+    Con registrar=False solo calcula la evaluación, sin escribir en la BD.
+    Se guarda una sola alerta por medición (INSERT IGNORE sobre medicion_id único).
+    """
+    valor = float(lectura['valor'])
+    unidad = lectura.get('unidad') or ''
+    tipo = tipo_de_sensor(sensor_id, lectura)
 
     with cursor_bd() as cursor:
         cursor.execute('SELECT * FROM umbrales WHERE tipo = %s', (tipo,))
         umbral = cursor.fetchone()
 
-    if umbral is None:
-        estado = 'SIN_UMBRAL'
-        detalle = f'No hay umbral configurado para el tipo "{tipo}".'
-    elif valor > umbral['maximo']:
-        estado = 'ALERTA_CRITICA'
-        detalle = f"El valor {valor} {unidad} supera el límite máximo permitido ({umbral['maximo']})."
-    elif valor < umbral['minimo']:
-        estado = 'ALERTA_CRITICA'
-        detalle = f"El valor {valor} {unidad} está por debajo del límite mínimo permitido ({umbral['minimo']})."
-    else:
-        estado = 'NORMAL'
-        detalle = 'El valor se encuentra dentro del rango operativo seguro.'
+    estado, detalle = clasificar(valor, unidad, tipo, umbral)
 
-    if estado == 'ALERTA_CRITICA' and ultima.get('id') is not None:
+    registrada = False
+    if registrar and estado == 'ALERTA_CRITICA' and lectura.get('id') is not None:
         with cursor_bd(commit=True) as cursor:
             cursor.execute(
                 'INSERT IGNORE INTO alertas (medicion_id, sensor_id, tipo, valor, estado, detalle, timestamp) '
                 'VALUES (%s, %s, %s, %s, %s, %s, %s)',
-                (ultima['id'], str(sensor_id), tipo, valor, estado, detalle, ultima.get('timestamp')),
+                (lectura['id'], str(sensor_id), tipo, valor, estado, detalle,
+                 a_datetime_utc(lectura.get('timestamp'))),
             )
+            registrada = True
 
-    return jsonify({
+    return {
         'sensor_id': str(sensor_id),
         'tipo': tipo,
         'evaluacion': estado,
         'diagnostico': detalle,
         'valor_evaluado': valor,
-        'timestamp_evaluado': ultima.get('timestamp'),
-    }), 200
+        'timestamp_evaluado': lectura.get('timestamp'),
+        'alerta_registrada': registrada,
+    }
+
+
+@app.route('/monitoreo/evaluar/<sensor_id>', methods=['GET', 'POST'])
+def evaluar_sensor(sensor_id):
+    """Evalúa la última lectura del sensor.
+
+    GET solo consulta (compatible con clientes anteriores): no escribe en la BD.
+    POST además registra la alerta si la lectura está fuera de rango.
+    Las lecturas nuevas también las evalúa de forma automática el worker (worker.py).
+    """
+    lecturas = consultar_mediciones(sensor_id=sensor_id, limit=1)
+    if not lecturas:
+        return jsonify({'mensaje': f'Sin datos para evaluar el sensor {sensor_id}'}), 404
+    resultado = evaluar_lectura(sensor_id, lecturas[-1], registrar=request.method == 'POST')
+    return jsonify(resultado), 200
 
 
 @app.route('/monitoreo/<sensor_id>', methods=['GET'])
 def resumen_sensor(sensor_id):
-    lecturas = consultar_mediciones(sensor_id=sensor_id)
+    estadisticas = consultar_mediciones('/mediciones/estadisticas', sensor_id=sensor_id)
+    lecturas = consultar_mediciones(sensor_id=sensor_id, limit=1) if estadisticas['total'] else []
     if not lecturas:
         return jsonify({'mensaje': f'El sensor {sensor_id} no tiene lecturas todavía'}), 404
 
-    valores = [float(l['valor']) for l in lecturas]
     return jsonify({
         'sensor_id': str(sensor_id),
-        'cantidad_lecturas': len(lecturas),
-        'promedio': round(sum(valores) / len(valores), 2),
+        'cantidad_lecturas': estadisticas['total'],
+        'promedio': estadisticas['promedio'],
         'ultima_lectura': lecturas[-1],
     }), 200
 
 
 if __name__ == '__main__':
-    inicializar()
+    # Solo para desarrollo local; en el contenedor se ejecuta con gunicorn (ver gunicorn_conf.py).
+    if not inicializar():
+        sys.exit('[monitoreo] no se pudo preparar la base de datos')
     app.run(host='0.0.0.0', port=5002)

@@ -1,0 +1,54 @@
+# Abre PRs automáticos cuando hay versiones nuevas (o parches de seguridad) de las dependencias.
+# Cubre: librerías Python de cada servicio, imágenes de cada Dockerfile, las imágenes de compose.yaml,
+# las dependencias de las pruebas del Home (npm) y las acciones del CI.
+# No cubre home/vendor/chart.umd.min.js (archivo copiado): ver home/vendor/README.md.
+version: 2
+updates:
+  # Python
+  - package-ecosystem: pip
+    directory: /mediciones
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /monitoreo
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /sensores
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /simulador
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+
+  # Imágenes de los Dockerfile
+  - package-ecosystem: docker
+    directory: /mediciones
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /monitoreo
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /sensores
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /simulador
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /home
+    schedule: { interval: weekly }
+
+  # Imágenes de compose.yaml (MySQL)
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }
+
+  # Pruebas del Home
+  - package-ecosystem: npm
+    directory: /home/e2e
+    schedule: { interval: weekly }
+
+  # CI
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

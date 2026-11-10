@@ -1,0 +1,15 @@
+{
+  "name": "agrosense-home-e2e",
+  "private": true,
+  "description": "Pruebas de navegador del Home (sin Docker)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.17.0"
+  }
+}

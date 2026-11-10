@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS alertas (
   valor DOUBLE NOT NULL,
   estado VARCHAR(30) NOT NULL,
   detalle VARCHAR(255),
-  timestamp VARCHAR(40),
+  timestamp DATETIME(3),
   INDEX idx_sensor (sensor_id)
 );
 

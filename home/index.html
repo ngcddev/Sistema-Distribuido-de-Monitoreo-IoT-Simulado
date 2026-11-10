@@ -4,18 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgroSense - Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <meta name="description" content="AgroSense: panel de monitoreo ambiental IoT (simulado) con sensores, mediciones, umbrales y alertas para zonas rurales.">
+    <meta name="theme-color" content="#2a2d34">
+    <meta name="color-scheme" content="light">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="style.css">
+    <script src="vendor/chart.umd.min.js" defer></script>
+    <script src="script.js" defer></script>
 </head>
 <body>
     <div class="app-layout">
-        
+
         <!-- Menú Lateral Oscuro (Sidebar) -->
         <aside class="sidebar">
             <div class="sidebar-brand">
-                <h2>AgroSense IoT</h2>
+                <p class="marca" translate="no">AgroSense IoT</p>
             </div>
-            
+
             <div class="sidebar-user">
                 <div class="avatar">A</div>
                 <span>Admin</span>
@@ -23,20 +28,20 @@
             </div>
 
             <div class="menu-section">
-                <h3>GESTIÓN IOT</h3>
-                <nav>
-                    <a href="#" id="menu-general" class="menu-item active">
+                <p class="menu-titulo" id="menu-gestion">GESTIÓN IOT</p>
+                <nav aria-labelledby="menu-gestion">
+                    <a href="#general" id="menu-general" class="menu-item active">
                         <span class="icon"></span> Vista general
                     </a>
-                    <a href="#" id="menu-admin" class="menu-item">
+                    <a href="#administracion" id="menu-admin" class="menu-item">
                         <span class="icon"></span> Administración
                     </a>
                 </nav>
             </div>
 
             <div class="menu-section">
-                <h3>SISTEMA</h3>
-                <nav>
+                <p class="menu-titulo" id="menu-sistema">SISTEMA</p>
+                <nav aria-labelledby="menu-sistema">
                     <a href="#" class="menu-item">
                         <span class="icon"></span> Configuración
                     </a>
@@ -46,7 +51,7 @@
 
         <!-- Área Principal -->
         <main class="main-content">
-            
+
             <!-- Barra Superior Blanca (Topbar) -->
             <header class="topbar">
                 <div class="breadcrumbs">
@@ -62,16 +67,16 @@
             <!-- Contenido (La gran tarjeta blanca) -->
             <div class="content-wrapper">
                 <div id="vista-monitoreo" class="main-card">
-                    
+
                     <div class="card-header">
-                        <h2>Sistema Distribuido de Monitoreo IoT (Simulado)</h2>
-                        <p>Plataforma de monitoreo ambiental distribuido. Permite la recepción, almacenamiento y análisis de datos 
-                            simulados de sensores IoT para la toma de decisiones en zonas rurales, garantizando alta disponibilidad</p>
+                        <h1>Sistema Distribuido de Monitoreo IoT (Simulado)</h1>
+                        <p>Plataforma de monitoreo ambiental distribuido. Permite la recepción, almacenamiento y análisis de datos
+                            simulados de sensores IoT para la toma de decisiones en zonas rurales.</p>
                     </div>
 
                     <!-- Grilla de Servicios -->
                     <div class="services-container">
-                        
+
                         <div class="service-item">
                             <div class="service-title"> Sensores</div>
                             <p>Catálogo de sensores (alta, consulta, ubicación, tipo).</p>
@@ -98,10 +103,10 @@
 
                     <!-- Sección de Equipo y Pruebas -->
                     <div class="bottom-grid">
-                        
+
                         <!-- Equipo -->
                         <div class="team-section">
-                            <h3>Equipo de Desarrollo</h3>
+                            <h2>Equipo de Desarrollo</h2>
                             <ul class="team-list">
                                 <li>Nicolas Gaviria</li>
                                 <li>Jainer Chocue</li>
@@ -112,17 +117,17 @@
 
                         <!-- Monitoreo y Analítica -->
                         <div class="test-section">
-                            <h3>Monitoreo de Sensores (Analytics)</h3>
-                            <p>Análisis en tiempo real consumido desde el microservicio <strong>Monitoreo (Puerto 5002)</strong>.</p>
+                            <h2>Monitoreo de Sensores (Analytics)</h2>
+                            <p>Análisis consumido desde el microservicio <strong>Monitoreo (Puerto 5002)</strong>. El gráfico se actualiza cada 10 s.</p>
 
-                            <div class="campos" style="margin-bottom: 15px;">
+                            <div class="campos campos-separados">
                                 <label class="campo">
                                     Sensor a monitorear:
-                                    <input id="monitoreo-sensor-id" type="number" min="1" value="1">
+                                    <input id="monitoreo-sensor-id" name="sensor_monitoreo" type="number" min="1" value="1" autocomplete="off">
                                 </label>
                             </div>
 
-                            <div class="botones" style="margin-bottom: 15px;">
+                            <div class="botones botones-separados">
                                 <button type="button" id="btn-resumen-general" class="btn-primary">Resumen General Global</button>
                                 <button type="button" id="btn-resumen-sensor" class="btn-secondary">Métricas Sensor</button>
                                 <button type="button" id="btn-evaluar-sensor" class="btn-secondary">Evaluar Umbrales</button>
@@ -131,14 +136,14 @@
                             </div>
 
                             <!-- Métricas rápidas -->
-                            <div id="panel-monitoreo" class="action-box" style="text-align: left; font-size: 13px; margin-bottom: 15px;">
-                                <p style="text-align: center; color: #6b7280;">Selecciona una opción para consultar las analíticas.</p>
+                            <div id="panel-monitoreo" class="action-box panel-resultados" aria-live="polite">
+                                <p class="panel-vacio">Selecciona una opción para consultar las analíticas.</p>
                             </div>
 
-                            <!-- Gráfico en tiempo real -->
-                            <div style="background-color: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #e5e7eb;">
-                                <h4 style="margin-bottom: 10px; color: #1f2937;">Histórico del Sensor (Tendencia)</h4>
-                                <canvas id="graficoMonitoreo" style="max-height: 250px;"></canvas>
+                            <!-- Gráfico (se refresca solo) -->
+                            <div class="grafico-card">
+                                <h3 class="grafico-titulo">Histórico del Sensor (Tendencia)</h3>
+                                <canvas id="graficoMonitoreo" class="grafico-canvas"></canvas>
                             </div>
                         </div>
 
@@ -148,28 +153,28 @@
 
                 <div id="vista-mediciones" class="main-card vista-oculta">
                     <div class="card-header">
-                        <h2>Administración de mediciones</h2>
+                        <h1>Administración de mediciones</h1>
                         <p>Altas, consultas y cambios de lecturas. Esta vista habla solo con el servicio de Mediciones.</p>
                     </div>
                     <div class="campos">
                         <label class="campo">
                             Sensor
-                            <input id="sensor-id" type="number" min="1" value="1">
+                            <input id="sensor-id" name="sensor_id" type="number" min="1" value="1" autocomplete="off">
                             <small>A qué sensor pertenece. Varias lecturas comparten este número.</small>
                         </label>
                         <label class="campo">
                             Valor
-                            <input id="valor" type="number" step="0.01" placeholder="0.00">
+                            <input id="valor" name="valor" type="number" step="0.01" placeholder="0.00" autocomplete="off">
                             <small>La lectura: temperatura o humedad.</small>
                         </label>
                         <label class="campo">
                             Id de la fila
-                            <input id="fila-id" type="number" min="1" placeholder="id">
+                            <input id="fila-id" name="fila_id" type="number" min="1" placeholder="id" autocomplete="off">
                             <small>Número único de una lectura. No se repite.</small>
                         </label>
                         <label class="campo">
                             Unidad
-                            <input id="unidad" type="text" value="C">
+                            <input id="unidad" name="unidad" type="text" value="C" autocomplete="off">
                             <small>C en temperatura, % en humedad.</small>
                         </label>
                     </div>
@@ -182,13 +187,13 @@
                         <button type="button" id="btn-delete" class="btn-danger">DELETE</button>
                     </div>
                     <p class="hint">El simulador ya crea lecturas con POST. El botón manual sirve para crear una desde aquí. PUT no agrega: reemplaza sensor, valor y unidad de la fila cuyo id escribiste. PATCH cambia solo el valor.</p>
-                    <div id="status" class="status-msg">Estado: En espera...</div>
-                    <div id="resultado" class="resultado"></div>
+                    <p class="hint">Crear, modificar y borrar piden el usuario y la contraseña de administración (el navegador las solicita al intentarlo); consultar es libre.</p>
+                    <div id="status" class="status-msg" role="status" aria-live="polite">Estado: en espera…</div>
+                    <div id="resultado" class="resultado" role="status" aria-live="polite"></div>
                     <div id="lecturas" class="live-block"></div>
                 </div>
             </div>
         </main>
     </div>
-    <script src="script.js"></script>
 </body>
 </html>
