@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        servicio: [mediciones, monitoreo, sensores]
+        servicio: [mediciones, monitoreo, sensores, simulador]
 
     steps:
       - name: Descargar el código del PR
@@ -85,10 +85,10 @@ jobs:
         run: cp .env.example .env
 
       - name: Verificar que los archivos compose son válidos
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml config -q
+        run: docker compose -f compose.yaml -f compose.dev.yaml config -q
 
       - name: Levantar el stack y esperar a que todo esté saludable
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait --wait-timeout 180
+        run: docker compose -f compose.yaml -f compose.dev.yaml up -d --build --wait --wait-timeout 180
 
       - name: Prueba de humo
         run: |
@@ -116,8 +116,8 @@ jobs:
 
       - name: Mostrar logs si algo falló
         if: failure()
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --no-color
+        run: docker compose -f compose.yaml -f compose.dev.yaml logs --no-color
 
       - name: Apagar el stack
         if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml down -v
+        run: docker compose -f compose.yaml -f compose.dev.yaml down -v

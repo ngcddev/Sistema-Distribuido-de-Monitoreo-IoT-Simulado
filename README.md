@@ -149,7 +149,7 @@ interna de Compose y se alcanzan a través del proxy de Home (`/mediciones`, `/m
 Para desarrollo, publica también los puertos de las APIs:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+docker compose -f compose.yaml -f compose.dev.yaml up --build
 ```
 
 - Mediciones: <http://localhost:5001>
@@ -187,7 +187,7 @@ docker compose down -v
 El workflow de GitHub Actions, en cada Pull Request hacia `main`:
 
 1. Revisa el código Python con `ruff` (reglas mínimas, ver `ruff.toml`).
-2. Ejecuta las pruebas de `mediciones`, `monitoreo` y `sensores` (`pytest`).
+2. Ejecuta las pruebas de `mediciones`, `monitoreo`, `sensores` y `simulador` (`pytest`).
 3. Ejecuta las pruebas de navegador del Home (`home/e2e`, sin Docker).
 4. Levanta el stack completo con `docker compose up --wait` (respeta los healthchecks) y
    ejecuta una prueba de humo contra las APIs y el proxy de Home.
@@ -218,8 +218,8 @@ Las pruebas del Home sirven la interfaz con las mismas cabeceras de seguridad qu
 ├── simulador/       # Generador de datos simulados
 ├── bases_datos/     # Scripts SQL de referencia
 ├── docs/            # Arquitectura y documentación por servicio
-├── docker-compose.yml       # Stack (solo publica Home)
-├── docker-compose.dev.yml   # Publica los puertos de las APIs (desarrollo)
+├── compose.yaml             # Stack (solo publica Home)
+├── compose.dev.yaml         # Publica los puertos de las APIs (desarrollo)
 ├── requirements-dev.txt     # Dependencias de las pruebas
 ├── ruff.toml                # Configuración del lint
 └── .env.example

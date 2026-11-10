@@ -1,3 +1,29 @@
+:root {
+    --azul: #2563eb;
+    --azul-hover: #1d4ed8;
+    --error: #b91c1c;
+    --error-hover: #991b1b;
+    --gris-50: #f9fafb;
+    --gris-100: #f3f4f6;
+    --gris-200: #e5e7eb;
+    --gris-300: #d1d5db;
+    --gris-400: #9ca3af;
+    --gris-500: #6b7280;
+    --gris-600: #4b5563;
+    --gris-700: #374151;
+    --gris-800: #1f2937;
+    --gris-900: #111827;
+    --sidebar: #2a2d34;
+    --sidebar-borde: #3f424a;
+    --fondo: #f4f6f8;
+    --texto: #333333;
+    --ok-fondo: #ecfdf5;
+    --ok-borde: #a7f3d0;
+    --ok-texto: #065f46;
+    /* Estados (contraste AA sobre blanco) */
+    --ok: #047857;
+    --aviso: #b45309;
+}
 
 * {
     margin: 0;
@@ -7,14 +33,15 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f4f6f8; /* Gris claro calcado de la imagen */
-    color: #333333;
+    background-color: var(--fondo); 
+    color: var(--texto);
     font-size: 15px;
 }
 
 .app-layout {
     display: flex;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
 }
 
@@ -23,7 +50,7 @@ body {
    ========================================= */
 .sidebar {
     width: 280px;
-    background-color: #2a2d34; /* Gris muy oscuro de la imagen */
+    background-color: var(--sidebar); 
     color: #ffffff;
     display: flex;
     flex-direction: column;
@@ -34,10 +61,10 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 1px solid #3f424a;
+    border-bottom: 1px solid var(--sidebar-borde);
 }
 
-.sidebar-brand h2 {
+.sidebar-brand .marca {
     font-size: 18px;
     font-weight: 600;
 }
@@ -47,7 +74,7 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
-    border-bottom: 1px solid #3f424a;
+    border-bottom: 1px solid var(--sidebar-borde);
     font-size: 14px;
     cursor: pointer;
 }
@@ -55,8 +82,8 @@ body {
 .avatar {
     width: 35px;
     height: 35px;
-    background-color: #e5e7eb;
-    color: #374151;
+    background-color: var(--gris-200);
+    color: var(--gris-700);
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -69,9 +96,10 @@ body {
     padding: 20px 0;
 }
 
-.menu-section h3 {
-    color: #9ca3af;
+.menu-titulo {
+    color: var(--gris-400);
     font-size: 12px;
+    font-weight: bold;
     padding: 0 20px;
     margin-bottom: 10px;
     letter-spacing: 1px;
@@ -82,19 +110,19 @@ body {
     align-items: center;
     gap: 12px;
     padding: 12px 20px;
-    color: #d1d5db;
+    color: var(--gris-300);
     text-decoration: none;
     font-size: 14px;
     transition: background 0.2s;
 }
 
 .menu-item:hover {
-    background-color: #3f424a;
+    background-color: var(--sidebar-borde);
 }
 
-/* El botón azul activo exacto de la imagen */
+/* Elemento activo del menú */
 .menu-item.active {
-    background-color: #2563eb; 
+    background-color: var(--azul); 
     color: #ffffff;
     font-weight: 600;
     margin: 0 10px;
@@ -119,23 +147,23 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--gris-200);
 }
 
 .breadcrumbs {
-    color: #6b7280;
+    color: var(--gris-500);
     font-size: 14px;
 }
 
 .breadcrumbs strong {
-    color: #1f2937;
+    color: var(--gris-800);
 }
 
 .topbar-actions {
     display: flex;
     gap: 20px;
     font-size: 18px;
-    color: #4b5563;
+    color: var(--gris-600);
     cursor: pointer;
 }
 
@@ -151,21 +179,21 @@ body {
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     padding: 30px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--gris-200);
 }
 
 .vista-oculta {
     display: none;
 }
 
-.card-header h2 {
+.card-header h1 {
     font-size: 22px;
-    color: #1f2937;
+    color: var(--gris-800);
     margin-bottom: 5px;
 }
 
 .card-header p {
-    color: #6b7280;
+    color: var(--gris-500);
     font-size: 15px;
     margin-bottom: 25px;
 }
@@ -179,7 +207,7 @@ body {
 }
 
 .service-item {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--gris-200);
     padding: 20px;
     border-radius: 6px;
 }
@@ -188,30 +216,19 @@ body {
     font-weight: 600;
     font-size: 16px;
     margin-bottom: 10px;
-    color: #111827;
+    color: var(--gris-900);
 }
 
 .service-item p {
-    color: #4b5563;
+    color: var(--gris-600);
     font-size: 14px;
     line-height: 1.5;
     margin-bottom: 15px;
 }
 
-.tag {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.tag-blue { background-color: #2563eb; color: white; }
-.tag-gray { background-color: #e5e7eb; color: #4b5563; }
-
 .divider {
     border: 0;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--gris-200);
     margin: 30px 0;
 }
 
@@ -222,9 +239,9 @@ body {
     gap: 40px;
 }
 
-h3 {
+h2 {
     font-size: 16px;
-    color: #111827;
+    color: var(--gris-900);
     margin-bottom: 15px;
 }
 
@@ -234,31 +251,27 @@ h3 {
 
 .team-list li {
     padding: 10px 0;
-    border-bottom: 1px solid #f3f4f6;
-    color: #4b5563;
+    border-bottom: 1px solid var(--gris-100);
+    color: var(--gris-600);
     font-size: 15px;
 }
 
-.team-list strong {
-    color: #1f2937;
-}
-
 .test-section p {
-    color: #4b5563;
+    color: var(--gris-600);
     font-size: 14px;
     margin-bottom: 15px;
 }
 
 .action-box {
-    background-color: #f9fafb;
-    border: 1px dashed #d1d5db;
+    background-color: var(--gris-50);
+    border: 1px dashed var(--gris-300);
     padding: 20px;
     border-radius: 6px;
     text-align: center;
 }
 
 .btn-primary {
-    background-color: #2563eb;
+    background-color: var(--azul);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -270,24 +283,24 @@ h3 {
 }
 
 .btn-primary:hover {
-    background-color: #1d4ed8;
+    background-color: var(--azul-hover);
 }
 
 .status-msg {
     margin-top: 15px;
     font-size: 13px;
-    color: #6b7280;
+    color: var(--gris-500);
     font-family: monospace;
 }
 
 .resultado {
     margin-top: 10px;
     padding: 10px 12px;
-    background-color: #ecfdf5;
-    border: 1px solid #a7f3d0;
+    background-color: var(--ok-fondo);
+    border: 1px solid var(--ok-borde);
     border-radius: 4px;
     font-size: 14px;
-    color: #065f46;
+    color: var(--ok-texto);
     text-align: left;
 }
 
@@ -299,7 +312,7 @@ h3 {
     margin-top: 12px;
     text-align: left;
     font-size: 13px;
-    color: #374151;
+    color: var(--gris-700);
 }
 
 .campos {
@@ -314,19 +327,19 @@ h3 {
     gap: 6px;
     font-size: 14px;
     font-weight: 600;
-    color: #111827;
+    color: var(--gris-900);
 }
 
 .campo small {
     font-weight: 400;
-    color: #6b7280;
+    color: var(--gris-500);
     font-size: 12px;
     line-height: 1.4;
 }
 
 .campo input {
     padding: 8px 10px;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--gris-300);
     border-radius: 4px;
     font-weight: 400;
 }
@@ -336,10 +349,6 @@ h3 {
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 16px;
-}
-
-.form-title {
-    margin-top: 20px;
 }
 
 .btn-secondary, .btn-danger {
@@ -352,11 +361,90 @@ h3 {
     color: white;
 }
 
-.btn-secondary { background-color: #4b5563; }
-.btn-danger { background-color: #b91c1c; }
+.btn-secondary { background-color: var(--gris-600); }
+.btn-danger { background-color: var(--error); }
 
 .hint {
     margin-top: 8px;
     font-size: 12px;
-    color: #6b7280;
+    color: var(--gris-500);
+}
+
+/* =========================================
+   UTILIDADES (sustituyen estilos en línea)
+   ========================================= */
+.campos-separados,
+.botones-separados {
+    margin-bottom: 15px;
+}
+
+.panel-resultados {
+    text-align: left;
+    font-size: 13px;
+    margin-bottom: 15px;
+}
+
+.panel-resultados .panel-vacio {
+    text-align: center;
+    color: var(--gris-500);
+}
+
+.grafico-card {
+    background-color: #ffffff;
+    padding: 15px;
+    border-radius: 6px;
+    border: 1px solid var(--gris-200);
+}
+
+.grafico-titulo {
+    font-size: 15px;
+    margin-bottom: 10px;
+    color: var(--gris-800);
+}
+
+.grafico-canvas {
+    max-height: 250px;
+}
+
+.titulo-panel { color: var(--azul); }
+.texto-error { color: var(--error); }
+.texto-ok { color: var(--ok); }
+
+/* Color del mensaje de estado (va al final para ganar a .status-msg) */
+.estado-ok { color: var(--ok); }
+.estado-aviso { color: var(--aviso); }
+.estado-error { color: var(--error); }
+.estado-info { color: var(--gris-600); }
+
+/* =========================================
+   ESTADOS DE INTERACCIÓN Y ACCESIBILIDAD
+   ========================================= */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+    outline: 2px solid var(--azul);
+    outline-offset: 2px;
+}
+
+/* Sobre el fondo oscuro del menú el azul no contrasta: se usa blanco. */
+.menu-item:focus-visible {
+    outline-color: #ffffff;
+}
+
+button {
+    touch-action: manipulation;
+}
+
+.btn-secondary:hover { background-color: var(--gris-700); }
+.btn-danger:hover { background-color: var(--error-hover); }
+
+.btn-secondary,
+.btn-danger {
+    transition: background-color 0.2s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+    }
 }

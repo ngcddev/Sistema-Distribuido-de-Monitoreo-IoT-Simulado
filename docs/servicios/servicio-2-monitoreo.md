@@ -78,6 +78,6 @@ Umbrales iniciales: temperatura 10–35 °C y humedad 30–80 %. Script de refer
 ## Ejecución
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build monitoreo
+docker compose -f compose.yaml -f compose.dev.yaml up --build monitoreo
 curl -X POST http://localhost:5002/monitoreo/evaluar/1
 ```

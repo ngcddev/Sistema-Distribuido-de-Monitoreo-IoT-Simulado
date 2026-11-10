@@ -45,6 +45,12 @@ Validaciones: `valor` debe ser numérico (no booleano), `sensor_id` entero o tex
 - `GET /mediciones/sensor/<sensor_id>` **reemplaza** a `GET /mediciones/<sensor_id>`. La ruta `GET /mediciones/<id>` ahora solo acepta un identificador entero de medición.
 - `GET /mediciones` y `GET /mediciones/sensor/<sensor_id>` **ya no devuelven todas las filas**: sin `limit` devuelven las 100 más recientes. La cabecera `X-Limite` informa del límite aplicado, para detectar que la lista puede estar acotada. Para totales y promedios usar `GET /mediciones/estadisticas`, que **no** da un promedio global: promedia por unidad, porque mezclar °C con % no tiene sentido.
 
+## Rutas equivalentes
+
+Hay tres formas de obtener lecturas concretas y se mantienen por compatibilidad: `GET /mediciones/<id>` (preferida
+para una medición), `GET /mediciones?id=<id>` (heredada, equivalente) y `GET /mediciones/sensor/<sensor_id>`
+(equivale a `GET /mediciones?sensor_id=<sensor_id>`). Las nuevas integraciones deben usar las preferidas.
+
 ## Base de datos
 
 | Base | Tabla | Columnas |
@@ -79,6 +85,6 @@ Script de referencia: [`bases_datos/mediciones.sql`](../../bases_datos/medicione
 ## Ejecución
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build mediciones
+docker compose -f compose.yaml -f compose.dev.yaml up --build mediciones
 curl http://localhost:5001/health
 ```

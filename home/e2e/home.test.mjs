@@ -45,7 +45,7 @@ const ahora = '2026-01-02T03:04:05+00:00';
 const lectura = (id) => ({ id, sensor_id: '1', valor: 20 + id, unidad: 'C', timestamp: ahora });
 
 function crearServidor() {
-    const estado = { peticiones: [], cortarPost: false };
+    const estado = { peticiones: [], cortarPost: false, alertas: [] };
     const seguridad = cabecerasDeNginx();
 
     const servidor = http.createServer((req, res) => {
@@ -111,7 +111,7 @@ function crearServidor() {
         if (req.method === 'GET' && ruta === '/monitoreo/umbrales') {
             return json(200, [{ id: 1, tipo: 'temperatura', minimo: 10, maximo: 35, unidad: 'C' }]);
         }
-        if (req.method === 'GET' && ruta === '/monitoreo/alertas') return json(200, []);
+        if (req.method === 'GET' && ruta === '/monitoreo/alertas') return json(200, estado.alertas);
         return json(404, { error: 'ruta no simulada: ' + req.method + ' ' + ruta });
     });
     return { servidor, estado };
@@ -147,6 +147,7 @@ describe('Home en el navegador', () => {
         pagina.on('response', (r) => { if (r.status() >= 400) errores.push(`HTTP ${r.status()}: ${r.url()}`); });
         estado.peticiones.length = 0;
         estado.cortarPost = false;
+        estado.alertas = [];
         await pagina.goto(base + ruta, { waitUntil: 'networkidle0' });
         return { pagina, errores };
     }
@@ -174,6 +175,89 @@ describe('Home en el navegador', () => {
             return window.__inline === true;
         });
         assert.equal(ejecutado, false, 'la CSP debería bloquear scripts en línea');
+        await pagina.close();
+    });
+
+    it('la CSP de estilos es estricta y la página no usa estilos en línea', async () => {
+        const { pagina, errores } = await abrir();
+        const respuesta = await pagina.goto(base + '/', { waitUntil: 'networkidle0' });
+        const csp = respuesta.headers()['content-security-policy'];
+        assert.match(csp, /style-src 'self'(;|$)/);
+        assert.doesNotMatch(csp, /unsafe-inline/);
+
+        // Recorre todos los paneles (incluido el gráfico) y comprueba que nada trae style="..." en el HTML.
+        for (const [boton, esperado] of [
+            ['#btn-resumen-general', 'Promedio por unidad'],
+            ['#btn-resumen-sensor', 'Métricas del Sensor'],
+            ['#btn-evaluar-sensor', 'ALERTA_CRITICA'],
+            ['#btn-ver-umbrales', 'Umbrales configurados'],
+            ['#btn-ver-alertas', 'No hay alertas'],
+        ]) {
+            await pagina.click(boton);
+            await pagina.waitForFunction((t) => document.getElementById('panel-monitoreo').textContent.includes(t), {}, esperado);
+        }
+        await pagina.waitForFunction(() => window.Chart.getChart('graficoMonitoreo') !== undefined);
+        const conEstilo = await pagina.evaluate(() => [...document.querySelectorAll('[style]')].map((e) => e.tagName));
+        // Chart.js ajusta el tamaño del <canvas> por CSSOM (permitido por la CSP); nada más debe tener style.
+        assert.deepEqual(conEstilo.filter((t) => t !== 'CANVAS'), []);
+        assert.deepEqual(errores, []);
+        await pagina.close();
+    });
+
+    it('cada vista tiene un único h1 y los encabezados no saltan de nivel', async () => {
+        const { pagina } = await abrir();
+        const niveles = () => pagina.evaluate(() => [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')]
+            .filter((h) => h.offsetParent !== null)
+            .map((h) => Number(h.tagName[1])));
+        for (const ruta of ['/', '/#administracion']) {
+            await pagina.goto(base + ruta, { waitUntil: 'networkidle0' });
+            await pagina.waitForFunction((r) => (r === '/'
+                ? !document.getElementById('vista-monitoreo').classList.contains('vista-oculta')
+                : !document.getElementById('vista-mediciones').classList.contains('vista-oculta')), {}, ruta);
+            const lista = await niveles();
+            assert.equal(lista.filter((n) => n === 1).length, 1, `h1 en ${ruta}: ${lista}`);
+            assert.equal(lista[0], 1);
+            lista.slice(1).forEach((n, i) => assert.ok(n <= lista[i] + 1, `salto de nivel en ${ruta}: ${lista}`));
+        }
+        await pagina.close();
+    });
+
+    it('declara metadatos: descripción, theme-color, color-scheme e icono', async () => {
+        const { pagina, errores } = await abrir();
+        const meta = (nombre) => pagina.$eval(`meta[name="${nombre}"]`, (m) => m.content);
+        assert.ok((await meta('description')).length > 40);
+        assert.match(await meta('theme-color'), /^#[0-9a-f]{6}$/i);
+        assert.equal(await meta('color-scheme'), 'light');
+        assert.equal(await pagina.$eval('link[rel="icon"]', (l) => l.getAttribute('href')), 'favicon.svg');
+        assert.deepEqual(errores, []);
+        await pagina.close();
+    });
+
+    it('los datos de la API se muestran como texto: un payload malicioso no se interpreta como HTML', async () => {
+        const { pagina, errores } = await abrir();
+        const ataque = '<img src=x onerror="window.__xss = 1"><script>window.__xss = 2</script>';
+        estado.alertas = [{ id: 1, sensor_id: '1', valor: 99, detalle: ataque }];
+        await pagina.click('#btn-ver-alertas');
+        await pagina.waitForFunction(() => document.getElementById('panel-monitoreo').textContent.includes('Últimas alertas'));
+        await new Promise((ok) => setTimeout(ok, 300)); // margen para que un onerror llegara a ejecutarse
+        assert.equal(await pagina.$('#panel-monitoreo img'), null, 'no debe existir un <img> inyectado');
+        assert.equal(await pagina.$('#panel-monitoreo script'), null);
+        assert.equal(await pagina.evaluate(() => window.__xss), undefined, 'no debe ejecutarse código del payload');
+        assert.ok((await texto(pagina, '#panel-monitoreo')).includes(ataque), 'el payload debe verse literalmente');
+        assert.deepEqual(errores, []);
+        await pagina.close();
+    });
+
+    it('marca la vista activa con aria-current', async () => {
+        const { pagina } = await abrir();
+        const actual = () => pagina.evaluate(() => ({
+            general: document.getElementById('menu-general').getAttribute('aria-current'),
+            admin: document.getElementById('menu-admin').getAttribute('aria-current'),
+        }));
+        assert.deepEqual(await actual(), { general: 'page', admin: null });
+        await pagina.click('#menu-admin');
+        await pagina.waitForFunction(() => document.getElementById('menu-admin').getAttribute('aria-current') === 'page');
+        assert.deepEqual(await actual(), { general: null, admin: 'page' });
         await pagina.close();
     });
 

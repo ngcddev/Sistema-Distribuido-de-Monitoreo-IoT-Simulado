@@ -145,42 +145,48 @@ def health_check():
     return jsonify({'status': 'ok'}), 200
 
 
+def validar_medicion(data):
+    """Valida el cuerpo de POST y PUT. Devuelve (campos, respuesta_de_error); uno de los dos es None.
+
+    El orden va de lo barato a lo caro: la consulta al catálogo de Sensores es lo último.
+    """
+    if not isinstance(data, dict) or 'sensor_id' not in data or 'valor' not in data:
+        return None, (jsonify({'error': 'sensor_id y valor son requeridos'}), 400)
+
+    sensor_id = sensor_valido(data['sensor_id'])
+    if sensor_id is None:
+        return None, (jsonify({'error': 'sensor_id no es válido'}), 400)
+    valor = a_numero(data['valor'])
+    if valor is None:
+        return None, (jsonify({'error': 'valor debe ser numérico'}), 400)
+    unidad, unidad_ok = unidad_valida(data.get('unidad'))
+    if not unidad_ok:
+        return None, (jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400)
+
+    desconocido = error_sensor_desconocido(sensor_id)
+    if desconocido:
+        return None, desconocido
+    return {'sensor_id': sensor_id, 'valor': valor, 'unidad': unidad}, None
+
+
 @app.route('/mediciones', methods=['POST'])
 def crear_medicion():
     data = request.get_json(silent=True)
-    if not isinstance(data, dict) or 'sensor_id' not in data or 'valor' not in data:
-        return jsonify({'error': 'sensor_id y valor son requeridos'}), 400
-
-    sensor_id = sensor_valido(data['sensor_id'])
-    valor = a_numero(data['valor'])
-    unidad, unidad_ok = unidad_valida(data.get('unidad'))
-    if sensor_id is None:
-        return jsonify({'error': 'sensor_id no es válido'}), 400
-    if valor is None:
-        return jsonify({'error': 'valor debe ser numérico'}), 400
-    if not unidad_ok:
-        return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
-    momento, error = leer_timestamp(data.get('timestamp'))
+    momento, error = leer_timestamp(data.get('timestamp') if isinstance(data, dict) else None)
     if error:
         return jsonify({'error': error}), 400
-    desconocido = error_sensor_desconocido(sensor_id)
-    if desconocido:
-        return desconocido
+    campos, error_respuesta = validar_medicion(data)
+    if error_respuesta:
+        return error_respuesta
 
     with cursor_bd(commit=True) as cursor:
         cursor.execute(
             'INSERT INTO mediciones (sensor_id, valor, unidad, timestamp) VALUES (%s, %s, %s, %s)',
-            (sensor_id, valor, unidad, momento),
+            (campos['sensor_id'], campos['valor'], campos['unidad'], momento),
         )
         nuevo_id = cursor.lastrowid
 
-    return jsonify({
-        'id': nuevo_id,
-        'sensor_id': sensor_id,
-        'valor': valor,
-        'unidad': unidad,
-        'timestamp': a_iso(momento),
-    }), 201
+    return jsonify({'id': nuevo_id, **campos, 'timestamp': a_iso(momento)}), 201
 
 
 def ultimas_mediciones(condiciones, parametros, limite):
@@ -298,39 +304,20 @@ def obtener_mediciones_por_sensor(sensor_id):
 
 @app.route('/mediciones/<int:medicion_id>', methods=['PUT'])
 def reemplazar_medicion(medicion_id):
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or 'sensor_id' not in data or 'valor' not in data:
-        return jsonify({'error': 'sensor_id y valor son requeridos'}), 400
-
-    sensor_id = sensor_valido(data['sensor_id'])
-    valor = a_numero(data['valor'])
-    unidad, unidad_ok = unidad_valida(data.get('unidad'))
-    if sensor_id is None:
-        return jsonify({'error': 'sensor_id no es válido'}), 400
-    if valor is None:
-        return jsonify({'error': 'valor debe ser numérico'}), 400
-    if not unidad_ok:
-        return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
-    desconocido = error_sensor_desconocido(sensor_id)
-    if desconocido:
-        return desconocido
+    campos, error_respuesta = validar_medicion(request.get_json(silent=True))
+    if error_respuesta:
+        return error_respuesta
 
     with cursor_bd(commit=True) as cursor:
         cursor.execute(
             'UPDATE mediciones SET sensor_id = %s, valor = %s, unidad = %s WHERE id = %s',
-            (sensor_id, valor, unidad, medicion_id),
+            (campos['sensor_id'], campos['valor'], campos['unidad'], medicion_id),
         )
         encontrada = cursor.rowcount > 0
     if not encontrada:
         return jsonify({'error': 'medicion no encontrada'}), 404
 
-    return jsonify({
-        'mensaje': 'medicion actualizada correctamente',
-        'id': medicion_id,
-        'sensor_id': sensor_id,
-        'valor': valor,
-        'unidad': unidad,
-    }), 200
+    return jsonify({'mensaje': 'medicion actualizada correctamente', 'id': medicion_id, **campos}), 200
 
 
 @app.route('/mediciones/<int:medicion_id>', methods=['PATCH'])

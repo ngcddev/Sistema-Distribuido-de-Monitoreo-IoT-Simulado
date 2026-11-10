@@ -21,8 +21,8 @@ Home no tiene base de datos ni lógica de negocio.
 | Archivo | Función |
 |---|---|
 | `index.html` | Estructura del dashboard y sus dos vistas |
-| `style.css` | Estilos |
-| `script.js` | Llamadas a las APIs, renderizado de resultados y gráfico |
+| `style.css` | Estilos: variables de color en `:root`, clases de estado (`.estado-*`) y sin estilos en línea |
+| `script.js` | Llamadas a las APIs, renderizado de resultados (como texto, nunca como HTML) y gráfico |
 | `nginx.conf` | Sirve los estáticos y define el proxy hacia Mediciones y Monitoreo (resuelve los servicios con el DNS de Docker en cada petición, así arranca aunque un servicio aún no exista) |
 | `proxy_params.conf` | Cabeceras y tiempos de espera comunes del proxy |
 | `favicon.svg` | Icono de la pestaña |
@@ -32,7 +32,15 @@ Home no tiene base de datos ni lógica de negocio.
 
 La gráfica usa Chart.js incluido en `home/vendor/`, así que funciona sin conexión a internet. Se refresca sola cada 10 s mientras se vea la vista general.
 
-La vista activa vive en la URL: `#general` (por defecto) y `#administracion`. El botón DELETE pide confirmación y los mensajes de estado son regiones `aria-live` para lectores de pantalla.
+La vista activa vive en la URL: `#general` (por defecto) y `#administracion`; el enlace activo lleva `aria-current="page"`. El botón DELETE pide confirmación y los mensajes de estado son regiones `aria-live` para lectores de pantalla.
+
+### Accesibilidad y buenas prácticas
+
+- Cada vista tiene un único `h1` y los encabezados no saltan de nivel.
+- Los datos de las APIs se muestran con `textContent`: aunque un valor contenga HTML, se ve como texto y no se ejecuta.
+- La página declara `description`, `theme-color` y `color-scheme`, y los campos llevan `name` y `autocomplete`.
+- Hay foco visible en enlaces, botones y campos, y los botones secundarios cambian al pasar el cursor.
+- Los scripts se cargan con `defer`.
 
 ## Vistas
 
@@ -55,7 +63,7 @@ Las rutas del proxy solo coinciden con `/mediciones` y `/monitoreo` (y sus subru
 
 ### Seguridad
 
-Nginx añade `Content-Security-Policy` (solo recursos propios; `unsafe-inline` únicamente en estilos), `X-Content-Type-Options`, `X-Frame-Options: DENY` y `Referrer-Policy`, oculta la versión del servidor, comprime con gzip y hace que el navegador revalide los estáticos en cada carga.
+Nginx añade `Content-Security-Policy` (solo recursos propios, sin scripts ni estilos en línea: la interfaz usa clases de `style.css`), `X-Content-Type-Options`, `X-Frame-Options: DENY` y `Referrer-Policy`, oculta la versión del servidor, comprime con gzip y hace que el navegador revalide los estáticos en cada carga.
 
 ## Comunicación
 

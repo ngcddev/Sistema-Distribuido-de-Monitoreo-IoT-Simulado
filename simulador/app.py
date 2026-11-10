@@ -1,9 +1,12 @@
+import logging
 import os
 import random
 import sys
 import time
 
 import requests
+
+logger = logging.getLogger('simulador')
 
 MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001')
 INTERVALO_SEGUNDOS = int(os.environ.get('INTERVALO_SEGUNDOS', 5))
@@ -21,18 +24,21 @@ SENSORES_RESPALDO = [
     {"id": 3, "tipo": "humedad", "ubicacion": "invernadero"},
 ]
 
+# Una sola sesión: reutiliza las conexiones HTTP en lugar de abrir una por cada lectura.
+sesion = requests.Session()
+
 
 def esperar_servicio(url, nombre, intentos=20, espera=2):
     """Reintenta el health check de un servicio hasta que responda o se agoten los intentos."""
     for intento in range(1, intentos + 1):
         try:
-            resp = requests.get(f"{url}/health", timeout=2)
+            resp = sesion.get(f"{url}/health", timeout=2)
             if resp.status_code == 200:
-                print(f"[simulador] {nombre} disponible")
+                logger.info("%s disponible", nombre)
                 return True
         except requests.exceptions.RequestException:
             pass
-        print(f"[simulador] esperando a {nombre}... ({intento}/{intentos})")
+        logger.info("esperando a %s… (%s/%s)", nombre, intento, intentos)
         time.sleep(espera)
     return False
 
@@ -40,14 +46,14 @@ def esperar_servicio(url, nombre, intentos=20, espera=2):
 def cargar_sensores():
     """Consulta el catálogo de sensores activos al servicio Sensores; usa el respaldo si falla."""
     try:
-        resp = requests.get(f"{SENSORES_URL}/sensores", params={"activo": "true"}, timeout=3)
+        resp = sesion.get(f"{SENSORES_URL}/sensores", params={"activo": "true"}, timeout=3)
         if resp.status_code == 200:
             sensores = resp.json()
             if sensores:
                 return sensores
-        print(f"[simulador] sensores respondió HTTP {resp.status_code}, usando catálogo de respaldo")
+        logger.warning("sensores respondió HTTP %s, usando catálogo de respaldo", resp.status_code)
     except (requests.exceptions.RequestException, ValueError) as err:
-        print(f"[simulador] no se pudo consultar sensores ({err}), usando catálogo de respaldo")
+        logger.warning("no se pudo consultar sensores (%s), usando catálogo de respaldo", err)
     return SENSORES_RESPALDO
 
 
@@ -63,23 +69,24 @@ def enviar_medicion(sensor):
     payload = {"sensor_id": sensor["id"], "valor": valor, "unidad": unidad}
 
     try:
-        resp = requests.post(f"{MEDICIONES_URL}/mediciones", json=payload, timeout=5)
+        resp = sesion.post(f"{MEDICIONES_URL}/mediciones", json=payload, timeout=5)
         if resp.status_code == 201:
-            print(f"[simulador] enviado: sensor {sensor['id']} ({sensor['tipo']}) -> {valor}{unidad}")
+            logger.info("enviado: sensor %s (%s) -> %s%s", sensor["id"], sensor["tipo"], valor, unidad)
         else:
-            print(f"[simulador] error al enviar medición (HTTP {resp.status_code}): {resp.text}")
+            logger.error("error al enviar medición (HTTP %s): %s", resp.status_code, resp.text)
     except requests.exceptions.RequestException as err:
-        print(f"[simulador] no se pudo conectar con mediciones: {err}")
+        logger.error("no se pudo conectar con mediciones: %s", err)
 
 
 def main():
-    print("[simulador] iniciando...")
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
+    logger.info("iniciando…")
 
     if not esperar_servicio(MEDICIONES_URL, "mediciones"):
-        print("[simulador] no se pudo conectar con mediciones, abortando")
+        logger.error("no se pudo conectar con mediciones, abortando")
         sys.exit(1)  # código distinto de 0: Docker lo reinicia (restart: unless-stopped)
 
-    print(f"[simulador] generando datos cada {INTERVALO_SEGUNDOS}s")
+    logger.info("generando datos cada %ss", INTERVALO_SEGUNDOS)
 
     while True:
         for sensor in cargar_sensores():

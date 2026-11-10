@@ -1,5 +1,5 @@
 # Solo Home (8080) queda publicado. Las APIs y las bases viven en la red interna de Compose.
-# Para exponer los puertos de las APIs en desarrollo: docker-compose.dev.yml (ver README).
+# Para exponer los puertos de las APIs en desarrollo: compose.dev.yaml (ver README).
 
 x-mysql: &mysql
   image: mysql:8.4

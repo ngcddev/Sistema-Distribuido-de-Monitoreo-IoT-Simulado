@@ -42,7 +42,7 @@ flowchart TD
 
 Todos los contenedores comparten la red por defecto de Docker Compose y se resuelven por
 nombre de servicio. Solo Home (8080) se publica en el host; las APIs y las bases quedan en
-la red interna (`docker-compose.dev.yml` publica los puertos de las APIs para desarrollo).
+la red interna (`compose.dev.yaml` publica los puertos de las APIs para desarrollo).
 
 ## 4. Responsabilidades
 
@@ -88,8 +88,14 @@ la red interna (`docker-compose.dev.yml` publica los puertos de las APIs para de
   entrega en ISO 8601. El sensor puede enviar su propia hora (`timestamp` opcional).
 - **Imágenes fijadas y sin root**: MySQL 8.4, nginx 1.28 y Python 3.12; los contenedores Python corren
   con un usuario sin privilegios y Home usa `nginx-unprivileged`.
+- **Código repetido entre servicios (decisión)**: `cursor_bd`, `database.py` y las funciones de validación
+  numérica se repiten en Mediciones, Monitoreo y Sensores. Se acepta a propósito: cada servicio se construye
+  solo con su carpeta como contexto de Docker y se despliega de forma independiente; una biblioteca común
+  obligaría a ampliar ese contexto o a publicar un paquete. Dentro de un mismo servicio no se repite nada
+  (por ejemplo, POST y PUT de Mediciones comparten `validar_medicion`). Conviene revisarlo si aparece un
+  cuarto servicio con base de datos.
 - **Interfaz sin dependencias externas**: Chart.js se sirve desde `home/vendor/` (sin CDN) y Nginx aplica
-  una política de seguridad de contenido restrictiva.
+  una política de seguridad de contenido estricta (sin scripts ni estilos en línea).
 - **Evaluación automática**: el Evaluador procesa las lecturas nuevas con `desde_id`, en lugar
   de depender de que alguien pulse "Evaluar".
 - **Servicio Sensores independiente**: el catálogo ya no es una lista fija del

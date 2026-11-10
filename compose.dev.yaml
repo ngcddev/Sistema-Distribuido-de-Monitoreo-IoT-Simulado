@@ -1,5 +1,5 @@
 # Solo desarrollo: publica los puertos de las APIs para probarlas con curl/Postman.
-# Uso: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Uso: docker compose -f compose.yaml -f compose.dev.yaml up --build
 services:
   mediciones:
     ports:

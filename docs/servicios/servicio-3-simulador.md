@@ -15,6 +15,8 @@ Proceso en Python (sin API) que genera lecturas aleatorias de temperatura y hume
 
 ## Funcionamiento
 
+Usa una sola sesión HTTP (`requests.Session`) para reutilizar conexiones y registra con `logging` (nivel `INFO`). Sus pruebas están en `simulador/tests/` y se ejecutan en el CI.
+
 1. Espera a que Mediciones responda `GET /health` (hasta 20 intentos, 2 s entre ellos). Si no responde, termina con código 1 y Docker lo reinicia (`restart: unless-stopped`).
 2. Cada `INTERVALO_SEGUNDOS`, consulta `GET /sensores?activo=true` en Sensores.
 3. Si Sensores no responde o devuelve una lista vacía, usa un catálogo de respaldo (3 sensores).
