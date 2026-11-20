@@ -81,12 +81,14 @@ services:
     build: ./gateway
     ports:
       - "8000:8000"
+    environment:
+      SENSOR_SERVICE_URL: ${SENSOR_SERVICE_URL}
+      MONITOREO_SERVICE_URL: ${MONITOREO_SERVICE_URL}
+      MEDICIONES_SERVICE_URL: ${MEDICIONES_SERVICE_URL}
     depends_on:
       - mediciones
       - monitoreo
       - sensores
-    env_file:
-      - ./.env
 
 volumes:
   mysql_mediciones_data:
