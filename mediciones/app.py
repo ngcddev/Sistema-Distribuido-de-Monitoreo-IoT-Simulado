@@ -1,12 +1,25 @@
+#########===========Servicio de Mediciones================#########
+
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import mysql.connector
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from database import conectar, inicializar
 
 app = Flask(__name__)
+
+
+@app.errorhandler(Exception)
+def error_generico(err):
+    """Responde JSON ante cualquier error, sin páginas HTML de Flask."""
+    if isinstance(err, HTTPException):
+        return jsonify({'error': err.description}), err.code
+    app.logger.exception(err)
+    return jsonify({'error': 'error interno del servidor'}), 500
+
 
 LIMITE_MAXIMO = 1000
 
@@ -25,11 +38,6 @@ def cursor_bd(commit=False):
             cursor.close()
     finally:
         conexion.close()
-
-
-@app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
 
 
 def a_numero(valor):
@@ -87,12 +95,15 @@ def crear_medicion():
         return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
 
     timestamp = datetime.now(timezone.utc).isoformat()
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute(
-            'INSERT INTO mediciones (sensor_id, valor, unidad, timestamp) VALUES (%s, %s, %s, %s)',
-            (sensor_id, valor, unidad, timestamp),
-        )
-        nuevo_id = cursor.lastrowid
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute(
+                'INSERT INTO mediciones (sensor_id, valor, unidad, timestamp) VALUES (%s, %s, %s, %s)',
+                (sensor_id, valor, unidad, timestamp),
+            )
+            nuevo_id = cursor.lastrowid
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
 
     return jsonify({
         'id': nuevo_id,
@@ -132,17 +143,23 @@ def listar_mediciones():
     else:
         consulta += ' ORDER BY id'
 
-    with cursor_bd() as cursor:
-        cursor.execute(consulta, parametros)
-        resultado = cursor.fetchall()
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute(consulta, parametros)
+            resultado = cursor.fetchall()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     return jsonify(resultado), 200
 
 
 @app.route('/mediciones/<int:medicion_id>', methods=['GET'])
 def obtener_medicion(medicion_id):
-    with cursor_bd() as cursor:
-        cursor.execute('SELECT * FROM mediciones WHERE id = %s', (medicion_id,))
-        fila = cursor.fetchone()
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute('SELECT * FROM mediciones WHERE id = %s', (medicion_id,))
+            fila = cursor.fetchone()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not fila:
         return jsonify({'error': 'medicion no encontrada'}), 404
     return jsonify(fila), 200
@@ -150,9 +167,12 @@ def obtener_medicion(medicion_id):
 
 @app.route('/mediciones/sensor/<sensor_id>', methods=['GET'])
 def obtener_mediciones_por_sensor(sensor_id):
-    with cursor_bd() as cursor:
-        cursor.execute('SELECT * FROM mediciones WHERE sensor_id = %s ORDER BY id', (sensor_id,))
-        resultado = cursor.fetchall()
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute('SELECT * FROM mediciones WHERE sensor_id = %s ORDER BY id', (sensor_id,))
+            resultado = cursor.fetchall()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     return jsonify(resultado), 200
 
 
@@ -172,12 +192,15 @@ def reemplazar_medicion(medicion_id):
     if not unidad_ok:
         return jsonify({'error': 'unidad debe ser texto de máximo 10 caracteres'}), 400
 
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute(
-            'UPDATE mediciones SET sensor_id = %s, valor = %s, unidad = %s WHERE id = %s',
-            (sensor_id, valor, unidad, medicion_id),
-        )
-        encontrada = cursor.rowcount > 0
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute(
+                'UPDATE mediciones SET sensor_id = %s, valor = %s, unidad = %s WHERE id = %s',
+                (sensor_id, valor, unidad, medicion_id),
+            )
+            encontrada = cursor.rowcount > 0
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not encontrada:
         return jsonify({'error': 'medicion no encontrada'}), 404
 
@@ -213,9 +236,12 @@ def actualizar_medicion(medicion_id):
         respuesta['unidad'] = unidad
 
     parametros.append(medicion_id)
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute(f"UPDATE mediciones SET {', '.join(campos)} WHERE id = %s", parametros)
-        encontrada = cursor.rowcount > 0
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute(f"UPDATE mediciones SET {', '.join(campos)} WHERE id = %s", parametros)
+            encontrada = cursor.rowcount > 0
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not encontrada:
         return jsonify({'error': 'medicion no encontrada'}), 404
 
@@ -225,9 +251,12 @@ def actualizar_medicion(medicion_id):
 
 @app.route('/mediciones/<int:medicion_id>', methods=['DELETE'])
 def eliminar_medicion(medicion_id):
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute('DELETE FROM mediciones WHERE id = %s', (medicion_id,))
-        eliminada = cursor.rowcount > 0
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute('DELETE FROM mediciones WHERE id = %s', (medicion_id,))
+            eliminada = cursor.rowcount > 0
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not eliminada:
         return jsonify({'error': 'medicion no encontrada'}), 404
     return jsonify({'mensaje': 'medicion eliminada correctamente', 'id': medicion_id}), 200

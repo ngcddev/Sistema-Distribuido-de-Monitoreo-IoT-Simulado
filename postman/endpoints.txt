@@ -1,0 +1,116 @@
+========================================
+ API GATEWAY - http://localhost:8000
+========================================
+
+GET    /health
+
+
+========================================
+ SENSORES
+========================================
+
+GET    /sensores
+GET    /sensores?tipo=temperatura&activo=true
+POST   /sensores
+GET    /sensores/1
+PUT    /sensores/1
+DELETE /sensores/1
+
+
+========================================
+ MEDICIONES
+========================================
+
+GET    /mediciones
+GET    /mediciones?sensor_id=1&limit=10
+POST   /mediciones
+GET    /mediciones/1
+PUT    /mediciones/1
+PATCH  /mediciones/1
+DELETE /mediciones/1
+GET    /mediciones/sensor/1
+
+
+========================================
+ MONITOREO
+========================================
+
+GET    /monitoreo/umbrales
+POST   /monitoreo/umbrales
+GET    /monitoreo/umbrales/1
+PUT    /monitoreo/umbrales/1
+DELETE /monitoreo/umbrales/1
+
+GET    /monitoreo/alertas
+GET    /monitoreo/alertas?sensor_id=1&limit=10
+DELETE /monitoreo/alertas/1
+
+GET    /monitoreo/resumen-general
+GET    /monitoreo/evaluar/1
+GET    /monitoreo/1
+GET    /monitoreo/circuitos
+
+
+========================================
+ ERRORES (deben responder JSON, no HTML)
+========================================
+
+GET    /ruta-que-no-existe        -> 404
+DELETE /sensores                  -> 405
+GET    /sensores/99999            -> 404
+POST   /mediciones  body {}       -> 400
+
+
+========================================
+ BODIES JSON (POST / PUT / PATCH)
+========================================
+
+POST /sensores
+{"nombre": "Sensor demo", "tipo": "humedad", "ubicacion": "laboratorio", "activo": true}
+
+POST /mediciones  (PUT usa el mismo)
+{"sensor_id": 1, "valor": 22.5, "unidad": "C"}
+
+PATCH /mediciones/1
+{"valor": 24}
+
+POST /monitoreo/umbrales  (PUT usa el mismo)
+{"tipo": "presion_demo", "minimo": 1, "maximo": 5, "unidad": "bar"}
+
+
+========================================
+ PRUEBA DE FALLA (tolerancia a fallos)
+========================================
+
+docker compose stop mediciones
+
+GET  /mediciones                    -> 502 servicio no disponible
+GET  /monitoreo/resumen-general     -> 503
+GET  /health                        -> mediciones: "no disponible"
+GET  /monitoreo/circuitos           -> circuito open tras 3 fallos
+
+docker compose start mediciones     -> se recupera solo (half_open -> closed)
+
+========================================
+ ORDEN SUGERIDO DE PRUEBA
+========================================
+
+1. GET /health
+2. GET /sensores
+3. POST /mediciones  {"sensor_id":1,"valor":22.5,"unidad":"C"}
+4. GET /monitoreo/1
+5. POST /mediciones  {"sensor_id":1,"valor":50,"unidad":"C"}
+6. GET /monitoreo/evaluar/1   -> debe dar ALERTA_CRITICA
+7. GET /monitoreo/circuitos
+
+========================================
+ PREVIO: docker compose up -d --build
+========================================
+Todos los servicios deben estar corriendo.
+Health individual de cada servicio (opcional, directo):
+sensores    -> http://localhost:5003/health
+mediciones  -> http://localhost:5001/health
+monitoreo   -> http://localhost:5002/health
+home        -> http://localhost:8080
+simulador   -> genera mediciones cada 5s automaticamente
+========================================
