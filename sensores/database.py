@@ -7,11 +7,11 @@ from mysql.connector.constants import ClientFlag
 
 TABLA_SENSORES = """
 CREATE TABLE IF NOT EXISTS sensores (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  nombre VARCHAR(80) NOT NULL,
-  tipo VARCHAR(30) NOT NULL,
-  ubicacion VARCHAR(80),
-  activo TINYINT(1) NOT NULL DEFAULT 1
+id INT AUTO_INCREMENT PRIMARY KEY,
+nombre VARCHAR(80) NOT NULL,
+tipo VARCHAR(30) NOT NULL,
+ubicacion VARCHAR(80),
+activo TINYINT(1) NOT NULL DEFAULT 1
 )
 """
 
