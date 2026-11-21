@@ -119,6 +119,21 @@ jobs:
           # Un sensor que no está en el catálogo se rechaza
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST -u admin:cambiar-admin localhost:8080/mediciones \
             -H 'Content-Type: application/json' -d '{"sensor_id": 999, "valor": 1}')" = 400
+          # API Gateway (:8000): enruta a los tres servicios, conserva códigos y exige credenciales para escribir
+          curl -fsS localhost:8000/health | grep -q '"mediciones":"ok"'
+          curl -fsS localhost:8000/sensores > /dev/null
+          curl -fsS localhost:8000/mediciones/estadisticas > /dev/null
+          curl -fsS localhost:8000/monitoreo/umbrales > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/sensores/999999)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8000/sensores \
+            -H 'Content-Type: application/json' -d '{"nombre": "x", "tipo": "humedad"}')" = 401
+          curl -fsS localhost:8000/monitoreo/circuitos | grep -q '"estado":"CLOSED"'
+          # Timeout: con Mediciones lento (6 s > 3 s) Monitoreo responde 504; se restablece al terminar
+          curl -fsS -X PUT -u admin:cambiar-admin localhost:8000/mediciones/simulacion/demora \
+            -H 'Content-Type: application/json' -d '{"segundos": 6}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/monitoreo/resumen-general)" = 504
+          curl -fsS -X PUT -u admin:cambiar-admin localhost:8000/mediciones/simulacion/demora \
+            -H 'Content-Type: application/json' -d '{"segundos": 0}'
           # Home sirve Chart.js localmente y con cabeceras de seguridad
           curl -fsS localhost:8080/vendor/chart.umd.min.js > /dev/null
           curl -fsSI localhost:8080/ | grep -qi 'x-content-type-options: nosniff'
