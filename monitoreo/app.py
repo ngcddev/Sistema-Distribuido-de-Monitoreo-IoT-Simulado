@@ -2,6 +2,7 @@
 
 
 import os
+import time
 from contextlib import contextmanager
 
 import mysql.connector
@@ -29,18 +30,43 @@ SENSORES_URL = os.environ['SENSORES_URL']
 MEDICIONES_TIMEOUT = int(os.environ.get('MEDICIONES_TIMEOUT', '3'))
 SENSORES_TIMEOUT = int(os.environ.get('SENSORES_TIMEOUT', '2'))
 
-# Circuit Breakers
-circuito_mediciones = pybreaker.CircuitBreaker(
-    fail_max=int(os.environ.get('CB_MAX_FAILS', '3')),
-    reset_timeout=int(os.environ.get('CB_TIMEOUT', '10')),
-    throw_new_error_on_trip=True
-)
+# Circuit Breakers: se abren tras CB_MAX_FAILS fallas técnicas seguidas (timeout, conexión o HTTP 5xx)
+# y, pasados CB_TIMEOUT segundos, dejan pasar una solicitud de prueba (HALF_OPEN).
+# Un 404 o un 400 de la dependencia NO cuentan como falla.
+CB_MAX_FAILS = int(os.environ.get('CB_MAX_FAILS', '3'))
+CB_TIMEOUT = int(os.environ.get('CB_TIMEOUT', '10'))
 
-circuito_sensores = pybreaker.CircuitBreaker(
-    fail_max=int(os.environ.get('CB_MAX_FAILS', '3')),
-    reset_timeout=int(os.environ.get('CB_TIMEOUT', '10')),
-    throw_new_error_on_trip=True
-)
+
+class RegistroDeApertura(pybreaker.CircuitBreakerListener):
+    """Anota cuándo se abrió el circuito: pybreaker solo pasa a HALF_OPEN al recibir la siguiente solicitud."""
+
+    def __init__(self):
+        self.abierto_desde = None
+
+    def state_change(self, cb, old_state, new_state):
+        self.abierto_desde = time.monotonic() if new_state.name == 'open' else None
+
+
+def crear_circuito(nombre, fail_max=None, reset_timeout=None):
+    return pybreaker.CircuitBreaker(
+        fail_max=CB_MAX_FAILS if fail_max is None else fail_max,
+        reset_timeout=CB_TIMEOUT if reset_timeout is None else reset_timeout,
+        name=nombre, throw_new_error_on_trip=True, listeners=[RegistroDeApertura()])
+
+
+def estado_visible(circuito):
+    """CLOSED, OPEN o HALF_OPEN. Un circuito abierto cuyo tiempo de recuperación ya venció se
+    informa como HALF_OPEN: la próxima solicitud será la prueba que decide si se cierra o se reabre."""
+    estado = circuito.current_state
+    if estado == 'open':
+        registro = circuito.listeners[0]
+        if registro.abierto_desde is not None and time.monotonic() - registro.abierto_desde >= circuito.reset_timeout:
+            return 'HALF_OPEN'
+    return estado.upper().replace('-', '_')
+
+
+circuito_mediciones = crear_circuito('mediciones')
+circuito_sensores = crear_circuito('sensores')
 
 # Si el servicio Sensores no responde, el tipo se deduce de la unidad de la lectura.
 TIPO_POR_UNIDAD = {'C': 'temperatura', '%': 'humedad'}
@@ -257,6 +283,19 @@ def listar_alertas():
     return jsonify(filas), 200
 
 
+@app.route('/monitoreo/alertas/<int:alerta_id>', methods=['GET'])
+def obtener_alerta(alerta_id):
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute('SELECT * FROM alertas WHERE id = %s', (alerta_id,))
+            fila = cursor.fetchone()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
+    if not fila:
+        return jsonify({'error': 'alerta no encontrada'}), 404
+    return jsonify(fila), 200
+
+
 @app.route('/monitoreo/alertas/<int:alerta_id>', methods=['DELETE'])
 def eliminar_alerta(alerta_id):
     try:
@@ -385,13 +424,13 @@ def estado_circuitos():
     """Muestra el estado de los circuit breakers."""
     return jsonify({
         'mediciones': {
-            'estado': circuito_mediciones.current_state,
+            'estado': estado_visible(circuito_mediciones),
             'contador_fallos': circuito_mediciones.fail_counter,
             'fallos_maximos': circuito_mediciones.fail_max,
             'tiempo_reinicio': circuito_mediciones.reset_timeout
         },
         'sensores': {
-            'estado': circuito_sensores.current_state,
+            'estado': estado_visible(circuito_sensores),
             'contador_fallos': circuito_sensores.fail_counter,
             'fallos_maximos': circuito_sensores.fail_max,
             'tiempo_reinicio': circuito_sensores.reset_timeout

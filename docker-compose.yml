@@ -1,21 +1,43 @@
+# Se publican solo dos puertos: Home (8080, interfaz web) y el API Gateway (8000, punto de entrada de
+# las APIs). Los microservicios y las bases viven en la red interna `red_iot` y solo se alcanzan a
+# través del Gateway o entre sí por nombre de servicio (http://mediciones:5001, ...).
+# Para probar una API directamente en desarrollo: docker-compose.dev.yml.
+
+x-mysql: &mysql
+  image: mysql:8.0
+  healthcheck:
+    test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 20s
+  networks: [red_iot]
+
+# Parámetros de tolerancia a fallos de Monitoreo (valores por defecto documentados en el README).
+x-tolerancia: &tolerancia
+  MEDICIONES_TIMEOUT: ${MEDICIONES_TIMEOUT:-3}
+  SENSORES_TIMEOUT: ${SENSORES_TIMEOUT:-2}
+  CB_MAX_FAILS: ${CB_MAX_FAILS:-3}
+  CB_TIMEOUT: ${CB_TIMEOUT:-10}
+
 services:
 
   mysql_mediciones:
-    image: mysql:8.0
+    <<: *mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_mediciones_data:/var/lib/mysql
 
   mysql_sensores:
-    image: mysql:8.0
+    <<: *mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_sensores_data:/var/lib/mysql
 
   mysql_monitoreo:
-    image: mysql:8.0
+    <<: *mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
@@ -23,32 +45,44 @@ services:
 
   mediciones:
     build: ./mediciones
-    ports:
-      - "5001:5001"
+    networks: [red_iot]
     environment:
       DB_HOST: mysql_mediciones
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: mediciones
+      DELAY_SEGUNDOS: ${DELAY_SEGUNDOS:-0}  # demora inicial simulada (pruebas de Timeout)
     depends_on:
-      - mysql_mediciones
+      mysql_mediciones:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   sensores:
     build: ./sensores
-    ports:
-      - "5003:5003"
+    networks: [red_iot]
     environment:
       DB_HOST: mysql_sensores
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: sensores
     depends_on:
-      - mysql_sensores
+      mysql_sensores:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5003/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   monitoreo:
     build: ./monitoreo
-    ports:
-      - "5002:5002"
+    networks: [red_iot]
     environment:
       DB_HOST: mysql_monitoreo
       DB_USER: ${DB_USER}
@@ -56,41 +90,75 @@ services:
       DB_NAME: monitoreo
       MEDICIONES_URL: http://mediciones:5001
       SENSORES_URL: http://sensores:5003
+      <<: *tolerancia
     depends_on:
-      - mysql_monitoreo
-      - mediciones
-      - sensores
+      mysql_monitoreo:
+        condition: service_healthy
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5002/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   simulador:
     build: ./simulador
+    networks: [red_iot]
     environment:
       MEDICIONES_URL: http://mediciones:5001
       SENSORES_URL: http://sensores:5003
+      INTERVALO_SEGUNDOS: ${INTERVALO_SEGUNDOS:-5}
+      MEDICIONES_TIMEOUT: ${MEDICIONES_TIMEOUT:-3}
+      SENSORES_TIMEOUT: ${SENSORES_TIMEOUT:-2}
+      CB_MAX_FAILS: ${CB_MAX_FAILS:-3}
+      CB_TIMEOUT: ${CB_TIMEOUT:-10}
     depends_on:
-      - mediciones
-      - sensores
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
 
-  home:
-    build: ./home
-    ports:
-      - "8080:80"
-    depends_on:
-      - mediciones
-      - monitoreo
-
+  # Punto de entrada único de las APIs: reenvía a Sensores, Mediciones y Monitoreo.
   gateway:
     build: ./gateway
+    networks: [red_iot]
     ports:
       - "8000:8000"
     environment:
-      SENSOR_SERVICE_URL: ${SENSOR_SERVICE_URL}
-      MONITOREO_SERVICE_URL: ${MONITOREO_SERVICE_URL}
-      MEDICIONES_SERVICE_URL: ${MEDICIONES_SERVICE_URL}
+      SENSOR_SERVICE_URL: http://sensores:5003
+      MEDICIONES_SERVICE_URL: http://mediciones:5001
+      MONITOREO_SERVICE_URL: http://monitoreo:5002
+      GATEWAY_TIMEOUT: ${GATEWAY_TIMEOUT:-8}
     depends_on:
-      - mediciones
-      - monitoreo
-      - sensores
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
+      monitoreo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
+  home:
+    build: ./home
+    networks: [red_iot]
+    ports:
+      - "8080:80"
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+networks:
+  red_iot:
+    name: red_iot
 
 volumes:
   mysql_mediciones_data:

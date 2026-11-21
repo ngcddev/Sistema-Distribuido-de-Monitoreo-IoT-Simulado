@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Interfaz web (HTML, CSS y JavaScript) servida por Nginx. Es el punto de entrada del usuario: desde el navegador permite administrar mediciones y consultar el análisis de Monitoreo. Nginx también actúa como **proxy inverso**: reenvía `/mediciones` y `/monitoreo` a sus APIs, por lo que el navegador solo habla con el puerto de Home.
+Interfaz web (HTML, CSS y JavaScript) servida por Nginx. Es el punto de entrada del usuario: desde el navegador permite administrar mediciones y consultar el análisis de Monitoreo. Nginx también actúa como **proxy inverso**: reenvía `/sensores`, `/mediciones` y `/monitoreo` al **API Gateway** (`http://gateway:8000`), que las enruta a su microservicio, por lo que el navegador solo habla con el puerto de Home.
 
 Home no tiene base de datos ni lógica de negocio.
 
@@ -40,8 +40,9 @@ La gráfica usa Chart.js, cargada desde un CDN; si el navegador no tiene conexi�
 | Ruta en Home | Destino interno |
 |---|---|
 | `/` | Archivos estáticos (`index.html`) |
-| `/mediciones` | `http://mediciones:5001` |
-| `/monitoreo` | `http://monitoreo:5002` |
+| `/sensores` | `http://gateway:8000` (Gateway → Sensores) |
+| `/mediciones` | `http://gateway:8000` (Gateway → Mediciones) |
+| `/monitoreo` | `http://gateway:8000` (Gateway → Monitoreo) |
 
 Sensores no se expone por Home: el navegador no lo consulta directamente.
 

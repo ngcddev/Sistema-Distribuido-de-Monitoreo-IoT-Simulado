@@ -36,6 +36,19 @@ API REST (Flask) que analiza las mediciones: calcula resúmenes por sensor y glo
 
 `GET /monitoreo/<sensor_id>` devuelve **`404`** cuando el sensor no tiene lecturas.
 
+## Tolerancia a fallos
+
+Las llamadas a Mediciones y a Sensores tienen timeout y Circuit Breaker (`pybreaker`):
+
+| Dependencia | Timeout | Umbral / recuperación | Respuesta si falla |
+|---|---|---|---|
+| Mediciones | `MEDICIONES_TIMEOUT` (3 s) | `CB_MAX_FAILS` (3) / `CB_TIMEOUT` (10 s) | `504` timeout, `503` sin conexión o circuito abierto, `502` si Mediciones responde 5xx |
+| Sensores | `SENSORES_TIMEOUT` (2 s) | igual | La evaluación continúa: el tipo se deduce de la unidad de la lectura y se añade una advertencia |
+
+Solo las fallas técnicas (timeout, conexión, 5xx) cuentan para abrir el circuito; un 404 no. `GET /monitoreo/circuitos`
+devuelve el estado (`CLOSED`, `OPEN`, `HALF_OPEN`), el contador de fallos y la configuración. `GET /monitoreo/alertas/<id>`
+obtiene una alerta (`404` si no existe).
+
 ## Base de datos
 
 | Base | Tabla | Columnas |
