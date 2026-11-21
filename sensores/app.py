@@ -3,6 +3,7 @@ from contextlib import contextmanager
 
 import mysql.connector
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from database import conectar, inicializar
 
@@ -37,6 +38,15 @@ def error_base_datos(err):
     if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
         return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
     return jsonify({'error': 'error interno de la base de datos'}), 500
+
+
+@app.errorhandler(Exception)
+def error_generico(err):
+    """Cualquier error no previsto responde JSON (nunca la página HTML de Flask)."""
+    if isinstance(err, HTTPException):
+        return jsonify({'error': err.description}), err.code
+    app.logger.exception(err)
+    return jsonify({'error': 'error interno del servidor'}), 500
 
 
 def serializar(fila):

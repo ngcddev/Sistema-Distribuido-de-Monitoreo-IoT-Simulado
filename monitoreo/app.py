@@ -1,11 +1,14 @@
 import os
 import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import mysql.connector
+import pybreaker
 import requests
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from database import conectar, inicializar
 
@@ -13,6 +16,49 @@ app = Flask(__name__)
 
 MEDICIONES_URL = os.environ.get('MEDICIONES_URL', 'http://localhost:5001')
 SENSORES_URL = os.environ.get('SENSORES_URL', 'http://localhost:5003')
+
+# Timeout (segundos) de cada llamada HTTP a otro servicio; configurable por entorno.
+MEDICIONES_TIMEOUT = float(os.environ.get('MEDICIONES_TIMEOUT', '3'))
+SENSORES_TIMEOUT = float(os.environ.get('SENSORES_TIMEOUT', '2'))
+
+# Circuit Breaker de cada dependencia: se abre tras CB_MAX_FAILS fallas técnicas seguidas
+# (timeout, conexión rechazada o HTTP 5xx) y, pasados CB_TIMEOUT segundos, deja pasar una
+# solicitud de prueba (HALF_OPEN). Un 404 o un 400 de la dependencia NO cuentan como falla.
+CB_MAX_FAILS = int(os.environ.get('CB_MAX_FAILS', '3'))
+CB_TIMEOUT = int(os.environ.get('CB_TIMEOUT', '10'))
+
+
+class RegistroDeApertura(pybreaker.CircuitBreakerListener):
+    """Anota cuándo se abrió el circuito: pybreaker solo pasa a HALF_OPEN al recibir la siguiente solicitud."""
+
+    def __init__(self):
+        self.abierto_desde = None
+
+    def state_change(self, cb, old_state, new_state):
+        self.abierto_desde = time.monotonic() if new_state.name == 'open' else None
+
+
+def crear_circuito(nombre, fail_max=None, reset_timeout=None):
+    circuito = pybreaker.CircuitBreaker(
+        fail_max=CB_MAX_FAILS if fail_max is None else fail_max,
+        reset_timeout=CB_TIMEOUT if reset_timeout is None else reset_timeout,
+        name=nombre, throw_new_error_on_trip=True, listeners=[RegistroDeApertura()])
+    return circuito
+
+
+def estado_visible(circuito):
+    """CLOSED, OPEN o HALF_OPEN. Un circuito abierto cuyo tiempo de recuperación ya venció se
+    informa como HALF_OPEN: la próxima solicitud será la prueba que decide si se cierra o se reabre."""
+    estado = circuito.current_state
+    if estado == 'open':
+        registro = circuito.listeners[0]
+        if registro.abierto_desde is not None and time.monotonic() - registro.abierto_desde >= circuito.reset_timeout:
+            return 'HALF_OPEN'
+    return estado.upper().replace('-', '_')
+
+
+circuito_mediciones = crear_circuito('mediciones')
+circuito_sensores = crear_circuito('sensores')
 
 # Si el servicio Sensores no responde, el tipo se deduce de la unidad de la lectura.
 TIPO_POR_UNIDAD = {'C': 'temperatura', '%': 'humedad'}
@@ -50,6 +96,15 @@ def error_base_datos(err):
     return jsonify({'error': 'error interno de la base de datos'}), 500
 
 
+@app.errorhandler(Exception)
+def error_generico(err):
+    """Cualquier error no previsto responde JSON (nunca la página HTML de Flask)."""
+    if isinstance(err, HTTPException):
+        return jsonify({'error': err.description}), err.code
+    app.logger.exception(err)
+    return jsonify({'error': 'error interno del servidor'}), 500
+
+
 def a_iso(momento):
     """datetime sin zona (UTC, como lo guarda MySQL) -> texto ISO 8601 con +00:00."""
     return momento.replace(tzinfo=timezone.utc).isoformat()
@@ -69,34 +124,56 @@ def a_datetime_utc(texto):
 
 
 class MedicionesNoDisponible(Exception):
-    pass
+    """El servicio Mediciones no pudo atender la consulta. `codigo` es el HTTP a devolver."""
+
+    def __init__(self, mensaje, codigo=503):
+        super().__init__(mensaje)
+        self.codigo = codigo
 
 
 def consultar_mediciones(ruta='/mediciones', **params):
-    """Consulta GET <ruta> del servicio Mediciones; lanza MedicionesNoDisponible si falla."""
+    """Consulta GET <ruta> del servicio Mediciones, protegida con timeout y Circuit Breaker.
+
+    Errores: 504 si se agota el timeout, 503 si no hay conexión o el circuito está abierto,
+    502 si Mediciones responde con un error que no es 5xx.
+    """
     try:
-        respuesta = requests.get(f'{MEDICIONES_URL}{ruta}', params=params, timeout=3)
+        with circuito_mediciones.calling():
+            respuesta = requests.get(f'{MEDICIONES_URL}{ruta}', params=params, timeout=MEDICIONES_TIMEOUT)
+            if respuesta.status_code >= 500:
+                respuesta.raise_for_status()  # cuenta como falla técnica del circuito
+    except pybreaker.CircuitBreakerError:
+        raise MedicionesNoDisponible('el servicio de Mediciones no está disponible (circuito abierto)', 503)
     except requests.exceptions.Timeout:
-        raise MedicionesNoDisponible('el servicio de Mediciones no respondió a tiempo')
+        raise MedicionesNoDisponible('el servicio de Mediciones no respondió a tiempo', 504)
+    except requests.exceptions.HTTPError:
+        raise MedicionesNoDisponible('el servicio de Mediciones devolvió un error interno', 502)
     except requests.exceptions.RequestException:
-        raise MedicionesNoDisponible('no se pudo conectar con el servicio de Mediciones')
+        raise MedicionesNoDisponible('no se pudo conectar con el servicio de Mediciones', 503)
     if respuesta.status_code != 200:
-        raise MedicionesNoDisponible('el servicio de Mediciones devolvió un error')
+        raise MedicionesNoDisponible('el servicio de Mediciones devolvió un error', 502)
     return respuesta.json()
 
 
 @app.errorhandler(MedicionesNoDisponible)
 def error_mediciones(err):
-    return jsonify({'error': str(err)}), 503
+    return jsonify({'error': str(err)}), err.codigo
 
 
 def tipo_de_sensor(sensor_id, lectura):
-    """Tipo del sensor según el servicio Sensores; respaldo: unidad de la lectura."""
+    """Tipo del sensor según el servicio Sensores; respaldo: unidad de la lectura.
+
+    La consulta está protegida con timeout y Circuit Breaker; si falla, no se interrumpe la
+    evaluación: se deduce el tipo de la unidad de la lectura.
+    """
     try:
-        respuesta = requests.get(f'{SENSORES_URL}/sensores/{sensor_id}', timeout=2)
+        with circuito_sensores.calling():
+            respuesta = requests.get(f'{SENSORES_URL}/sensores/{sensor_id}', timeout=SENSORES_TIMEOUT)
+            if respuesta.status_code >= 500:
+                respuesta.raise_for_status()
         if respuesta.status_code == 200:
             return respuesta.json().get('tipo')
-    except (requests.exceptions.RequestException, ValueError):
+    except (pybreaker.CircuitBreakerError, requests.exceptions.RequestException, ValueError):
         pass
     return TIPO_POR_UNIDAD.get(lectura.get('unidad'))
 
@@ -225,6 +302,18 @@ def listar_alertas():
     return jsonify(filas), 200
 
 
+@app.route('/monitoreo/alertas/<int:alerta_id>', methods=['GET'])
+def obtener_alerta(alerta_id):
+    with cursor_bd() as cursor:
+        cursor.execute('SELECT * FROM alertas WHERE id = %s', (alerta_id,))
+        fila = cursor.fetchone()
+    if not fila:
+        return jsonify({'error': 'alerta no encontrada'}), 404
+    if isinstance(fila.get('timestamp'), datetime):
+        fila['timestamp'] = a_iso(fila['timestamp'])
+    return jsonify(fila), 200
+
+
 @app.route('/monitoreo/alertas/<int:alerta_id>', methods=['DELETE'])
 def eliminar_alerta(alerta_id):
     with cursor_bd(commit=True) as cursor:
@@ -318,6 +407,23 @@ def evaluar_sensor(sensor_id):
         return jsonify({'mensaje': f'Sin datos para evaluar el sensor {sensor_id}'}), 404
     resultado = evaluar_lectura(sensor_id, lecturas[-1], registrar=request.method == 'POST')
     return jsonify(resultado), 200
+
+
+@app.route('/monitoreo/circuitos', methods=['GET'])
+def estado_circuitos():
+    """Estado de los Circuit Breakers (CLOSED / OPEN / HALF_OPEN) y su configuración."""
+    def describir(circuito, timeout):
+        return {
+            'estado': estado_visible(circuito),
+            'contador_fallos': circuito.fail_counter,
+            'umbral_fallos': circuito.fail_max,
+            'tiempo_recuperacion_segundos': circuito.reset_timeout,
+            'timeout_solicitud_segundos': timeout,
+        }
+    return jsonify({
+        'mediciones': describir(circuito_mediciones, MEDICIONES_TIMEOUT),
+        'sensores': describir(circuito_sensores, SENSORES_TIMEOUT),
+    }), 200
 
 
 @app.route('/monitoreo/<sensor_id>', methods=['GET'])

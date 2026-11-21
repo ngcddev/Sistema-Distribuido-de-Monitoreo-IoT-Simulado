@@ -61,6 +61,16 @@ nada. Si la base falla, lo registra y lo reintenta en el siguiente ciclo. Las al
 Para comprobarlo a mano: crear una lectura antigua (`timestamp` de hace más de `RETENCION_DIAS` días) y esperar
 al siguiente ciclo (o bajar `PURGA_INTERVALO_SEGUNDOS`).
 
+## Simulación de demora (pruebas de Timeout)
+
+| Método | Ruta | Descripción | Respuestas |
+|---|---|---|---|
+| GET | `/mediciones/simulacion/demora` | Demora actual en segundos | `200` |
+| PUT | `/mediciones/simulacion/demora` | Body `{"segundos": 6}` (0 a 60). Todas las peticiones (salvo `/health`) esperan ese tiempo; `0` restablece el comportamiento normal | `200`, `400` |
+
+Sirve para demostrar el Timeout de Monitoreo. El valor se guarda en un archivo compartido por los workers de
+gunicorn; `DELAY_SEGUNDOS` fija la demora inicial al arrancar.
+
 ## Base de datos
 
 | Base | Tabla | Columnas |

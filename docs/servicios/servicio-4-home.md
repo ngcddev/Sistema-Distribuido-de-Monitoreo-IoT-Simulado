@@ -2,7 +2,7 @@
 
 ## Resumen
 
-Interfaz web (HTML, CSS y JavaScript) servida por Nginx. Es el punto de entrada del usuario: desde el navegador permite administrar mediciones y consultar el análisis de Monitoreo. Nginx también actúa como **proxy inverso**: reenvía `/mediciones` y `/monitoreo` a sus APIs, por lo que el navegador solo habla con el puerto de Home.
+Interfaz web (HTML, CSS y JavaScript) servida por Nginx. Es el punto de entrada del usuario: desde el navegador permite administrar mediciones y consultar el análisis de Monitoreo. Nginx también actúa como **proxy inverso**: reenvía `/sensores`, `/mediciones` y `/monitoreo` al **API Gateway** (`http://gateway:8000`), que las enruta al microservicio correspondiente, por lo que el navegador solo habla con el puerto de Home.
 
 Home no tiene base de datos ni lógica de negocio.
 
@@ -55,16 +55,17 @@ La vista activa vive en la URL: `#general` (por defecto) y `#administracion`; el
 | Ruta en Home | Destino interno |
 |---|---|
 | `/` | Archivos estáticos (`index.html`) |
-| `/mediciones` | `http://mediciones:5001` |
-| `/monitoreo` | `http://monitoreo:5002` |
+| `/sensores` | `http://gateway:8000` (Gateway → Sensores) |
+| `/mediciones` | `http://gateway:8000` (Gateway → Mediciones) |
+| `/monitoreo` | `http://gateway:8000` (Gateway → Monitoreo) |
 
 Sensores no se expone por Home: el navegador no lo consulta directamente.
 
-Las rutas del proxy solo coinciden con `/mediciones` y `/monitoreo` (y sus subrutas), no con prefijos como `/medicionesXYZ`.
+Las rutas del proxy solo coinciden con `/sensores`, `/mediciones` y `/monitoreo` (y sus subrutas), no con prefijos como `/medicionesXYZ`.
 
 ### Acceso: quién puede escribir
 
-Nginx permite **consultar** libremente, pero **crear, modificar y borrar** (`POST`, `PUT`, `PATCH`, `DELETE` sobre `/mediciones` y `/monitoreo`) exige el usuario y la contraseña de `HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`. Sin ellas responde `401` con el desafío Basic (el navegador muestra su diálogo de acceso) y un JSON con el motivo; la pantalla de administración lo muestra como mensaje de error. `POST /monitoreo/evaluar/*` queda libre porque es idempotente.
+Nginx permite **consultar** libremente, pero **crear, modificar y borrar** (`POST`, `PUT`, `PATCH`, `DELETE` sobre `/sensores`, `/mediciones` y `/monitoreo`) exige el usuario y la contraseña de `HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`. Sin ellas responde `401` con el desafío Basic (el navegador muestra su diálogo de acceso) y un JSON con el motivo; la pantalla de administración lo muestra como mensaje de error. `POST /monitoreo/evaluar/*` queda libre porque es idempotente.
 
 Al arrancar, `15-credenciales.sh` convierte las dos variables en la cabecera `Authorization` esperada y la guarda en `/tmp/credenciales.conf`; `nginx.conf` la incluye y decide con dos `map` (¿escribe?, ¿credenciales correctas?). Las credenciales no se reenvían a las APIs. Limitaciones: autenticación Basic sobre HTTP (usuario y contraseña viajan sin cifrar; para exponerlo hace falta HTTPS) y una sola cuenta.
 

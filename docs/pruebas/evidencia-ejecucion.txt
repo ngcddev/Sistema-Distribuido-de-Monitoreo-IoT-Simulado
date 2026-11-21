@@ -1,0 +1,172 @@
+# Ejecución de docs/pruebas/pruebas-integrales.sh sobre el stack real (Docker Compose, a través del API Gateway)
+# Fecha: 2026-11-21T16:55:18Z
+
+$ docker compose ps
+SERVICE            STATUS                        PORTS
+evaluador          Up 2 minutes                  5002/tcp
+gateway            Up 6 minutes (healthy)        0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+home               Up 6 minutes (healthy)        0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp
+mediciones         Up About a minute (healthy)   5001/tcp
+monitoreo          Up 2 minutes (healthy)        5002/tcp
+mysql_mediciones   Up 10 minutes (healthy)       3306/tcp, 33060/tcp
+mysql_monitoreo    Up 10 minutes (healthy)       3306/tcp, 33060/tcp
+mysql_sensores     Up 10 minutes (healthy)       3306/tcp, 33060/tcp
+purgador           Up 6 minutes                  5001/tcp
+sensores           Up 6 minutes (healthy)        5003/tcp
+simulador          Up 6 minutes                  
+
+$ bash docs/pruebas/pruebas-integrales.sh todo
+
+=== Comunicación entre servicios (Monitoreo -> Mediciones y Sensores) ===
+  GET     /monitoreo/resumen-general                 -> 200 {"listado_sensores":["1","2","3","5","6"],"promedios_por_unidad":{"%":54.0,"C":27.39},"total_lecturas_sistema":309,"total_sensores_activos":5}
+    OK (HTTP 200)
+  GET     /monitoreo/evaluar/1                       -> 200 {"alerta_registrada":false,"diagnostico":"El valor se encuentra dentro del rango operativo seguro.","evaluacion":"NORMAL","sensor_id":"1","timestamp_e
+    OK (HTTP 200)
+  GET     /monitoreo/1                               -> 200 {"cantidad_lecturas":101,"promedio":27.61,"sensor_id":"1","ultima_lectura":{"id":308,"sensor_id":"1","timestamp":"2026-11-21T16:55:18.061000+00:00","u
+    OK (HTTP 200)
+  GET     /monitoreo/circuitos                       -> 200 {"mediciones":{"contador_fallos":0,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3},"sensores":
+    OK (HTTP 200)
+
+=== CRUD Sensores ===
+  POST    /sensores                                  -> 201 {"activo":true,"id":7,"nombre":"Sensor prueba","tipo":"humedad","ubicacion":"vivero"}
+    OK (HTTP 201)
+  GET     /sensores/7                                -> 200 {"activo":true,"id":7,"nombre":"Sensor prueba","tipo":"humedad","ubicacion":"vivero"}
+    OK (HTTP 200)
+  PUT     /sensores/7                                -> 200 {"activo":false,"id":7,"nombre":"Sensor prueba editado","tipo":"temperatura","ubicacion":"vivero"}
+    OK (HTTP 200)
+  GET     /sensores/7                                -> 200 {"activo":false,"id":7,"nombre":"Sensor prueba editado","tipo":"temperatura","ubicacion":"vivero"}
+    OK (HTTP 200)
+    OK: la modificación quedó almacenada (prueba editado)
+  DELETE  /sensores/7                                -> 200 {"id":7,"mensaje":"sensor eliminado correctamente"}
+    OK (HTTP 200)
+  GET     /sensores/7                                -> 404 {"error":"sensor no encontrado"}
+    OK (HTTP 404)
+  GET     /sensores/999999                           -> 404 {"error":"sensor no encontrado"}
+    OK (HTTP 404)
+  DELETE  /sensores/999999                           -> 404 {"error":"sensor no encontrado"}
+    OK (HTTP 404)
+
+=== CRUD Mediciones ===
+  POST    /mediciones                                -> 201 {"id":311,"sensor_id":"1","timestamp":"2026-11-21T16:55:22.758418+00:00","unidad":"C","valor":21.5}
+    OK (HTTP 201)
+  GET     /mediciones/311                            -> 200 {"id":311,"sensor_id":"1","timestamp":"2026-11-21T16:55:22.758000+00:00","unidad":"C","valor":21.5}
+    OK (HTTP 200)
+  PUT     /mediciones/311                            -> 200 {"id":311,"mensaje":"medicion actualizada correctamente","sensor_id":"1","unidad":"C","valor":33.3}
+    OK (HTTP 200)
+  GET     /mediciones/311                            -> 200 {"id":311,"sensor_id":"1","timestamp":"2026-11-21T16:55:22.758000+00:00","unidad":"C","valor":33.3}
+    OK (HTTP 200)
+    OK: la modificación quedó almacenada (33.3)
+  DELETE  /mediciones/311                            -> 200 {"id":311,"mensaje":"medicion eliminada correctamente"}
+    OK (HTTP 200)
+  GET     /mediciones/311                            -> 404 {"error":"medicion no encontrada"}
+    OK (HTTP 404)
+  GET     /mediciones/999999                         -> 404 {"error":"medicion no encontrada"}
+    OK (HTTP 404)
+  DELETE  /mediciones/999999                         -> 404 {"error":"medicion no encontrada"}
+    OK (HTTP 404)
+
+=== CRUD Umbrales ===
+  POST    /monitoreo/umbrales                        -> 201 {"id":5,"maximo":1100.0,"minimo":900.0,"tipo":"presion","unidad":"hPa"}
+    OK (HTTP 201)
+  GET     /monitoreo/umbrales/5                      -> 200 {"id":5,"maximo":1100.0,"minimo":900.0,"tipo":"presion","unidad":"hPa"}
+    OK (HTTP 200)
+  PUT     /monitoreo/umbrales/5                      -> 200 {"id":5,"maximo":1050.0,"minimo":950.0,"tipo":"presion","unidad":"hPa"}
+    OK (HTTP 200)
+  GET     /monitoreo/umbrales/5                      -> 200 {"id":5,"maximo":1050.0,"minimo":950.0,"tipo":"presion","unidad":"hPa"}
+    OK (HTTP 200)
+    OK: la modificación quedó almacenada (1050)
+  DELETE  /monitoreo/umbrales/5                      -> 200 {"id":5,"mensaje":"umbral eliminado correctamente"}
+    OK (HTTP 200)
+  GET     /monitoreo/umbrales/5                      -> 404 {"error":"umbral no encontrado"}
+    OK (HTTP 404)
+  GET     /monitoreo/umbrales/999999                 -> 404 {"error":"umbral no encontrado"}
+    OK (HTTP 404)
+  DELETE  /monitoreo/umbrales/999999                 -> 404 {"error":"umbral no encontrado"}
+    OK (HTTP 404)
+
+=== Alertas (se generan al evaluar; solo lectura y borrado) ===
+  GET     /monitoreo/alertas?limit=1                 -> 200 [{"detalle":"El valor 37.55 C supera el l\u00edmite m\u00e1ximo permitido (35.0).","estado":"ALERTA_CRITICA","id":73,"medicion_id":306,"sensor_id":"2"
+    OK (HTTP 200)
+  GET     /monitoreo/alertas/999999                  -> 404 {"error":"alerta no encontrada"}
+    OK (HTTP 404)
+  DELETE  /monitoreo/alertas/999999                  -> 404 {"error":"alerta no encontrada"}
+    OK (HTTP 404)
+
+=== Validaciones y credenciales ===
+  POST    /sensores                                  -> 400 {"error":"tipo debe ser uno de: temperatura, humedad"}
+    OK (HTTP 400)
+  POST    /sensores (sin credenciales)               -> 401
+    OK (HTTP 401)
+  GET     /ruta-inexistente                          -> 404 {"error":"ruta desconocida: /ruta-inexistente"}
+    OK (HTTP 404)
+
+=== Timeout (Monitoreo -> Mediciones: 3 s) ===
+ 1) Normal
+  GET     /monitoreo/resumen-general                 -> 200 {"listado_sensores":["1","2","3","5","6"],"promedios_por_unidad":{"%":54.33,"C":27.36},"total_lecturas_sistema":312,"total_sensores_activos":5}
+    OK (HTTP 200)
+ 2) Respuesta lenta: Mediciones tarda 6 s (> timeout)
+  PUT     /mediciones/simulacion/demora              -> 200 {"demora_segundos":6.0,"mensaje":"demora actualizada"}
+    OK (HTTP 200)
+  GET     /monitoreo/resumen-general                 -> 504 {"error":"el servicio de Mediciones no respondi\u00f3 a tiempo"}
+    OK (HTTP 504)
+ 3) Se restablece el comportamiento normal
+  PUT     /mediciones/simulacion/demora              -> 200 {"demora_segundos":0.0,"mensaje":"demora actualizada"}
+    OK (HTTP 200)
+  GET     /monitoreo/resumen-general                 -> 200 {"listado_sensores":["1","2","3","5","6"],"promedios_por_unidad":{"%":54.48,"C":27.25},"total_lecturas_sistema":321,"total_sensores_activos":5}
+    OK (HTTP 200)
+    "contador_fallos":0,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+
+=== Circuit Breaker (Monitoreo -> Mediciones: umbral 3 fallas, recuperación 10 s) ===
+ 1) Estado inicial
+    "contador_fallos":0,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+ 2) Fallas técnicas controladas: se detiene Mediciones
+  GET     /monitoreo/resumen-general                 -> 503 {"error":"no se pudo conectar con el servicio de Mediciones"}
+    contador -> "contador_fallos":1,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+  GET     /monitoreo/resumen-general                 -> 503 {"error":"no se pudo conectar con el servicio de Mediciones"}
+    contador -> "contador_fallos":2,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+  GET     /monitoreo/resumen-general                 -> 503 {"error":"el servicio de Mediciones no est\u00e1 disponible (circuito abierto)"}
+    contador -> "contador_fallos":3,"estado":"OPEN","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+ 3) Circuito abierto: la solicitud se rechaza sin llamar a Mediciones
+  GET     /monitoreo/resumen-general                 -> 503 {"error":"el servicio de Mediciones no est\u00e1 disponible (circuito abierto)"}
+    OK (HTTP 503)
+    "contador_fallos":3,"estado":"OPEN","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+ 4) Se restablece Mediciones (el circuito sigue OPEN hasta cumplirse el tiempo de recuperación)
+  GET     /monitoreo/resumen-general                 -> 503 {"error":"el servicio de Mediciones no est\u00e1 disponible (circuito abierto)"}
+    OK (HTTP 503)
+ 5) Pasados 10 s: HALF_OPEN deja pasar una solicitud de prueba
+    antes de la prueba: "contador_fallos":3,"estado":"HALF_OPEN","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+    OK (HALF_OPEN)
+  GET     /monitoreo/resumen-general                 -> 200 {"listado_sensores":["1","2","3","5","6"],"promedios_por_unidad":{"%":55.24,"C":27.27},"total_lecturas_sistema":333,"total_sensores_activos":5}
+    OK (HTTP 200)
+ 6) Recuperación: vuelve a CLOSED
+    "contador_fallos":0,"estado":"CLOSED","tiempo_recuperacion_segundos":10,"timeout_solicitud_segundos":3.0,"umbral_fallos":3
+    OK (CLOSED)
+
+=== Simulación de fallos: docker compose stop sensores ===
+  GET     /sensores                                  -> 200 [{"activo":true,"id":1,"nombre":"Temperatura sala","tipo":"temperatura","ubicacion":"sala"},{"activo":true,"id":2,"nombre":"Temperatura cocina","tipo"
+    OK (HTTP 200)
+ Con Sensores detenido:
+  GET     /sensores                                  -> 503 {"error":"el servicio de sensores no est\u00e1 disponible"}
+    OK (HTTP 503)
+  GET     /mediciones?limit=1                        -> 200 [{"id":335,"sensor_id":"3","timestamp":"2026-11-21T16:56:22.675000+00:00","unidad":"%","valor":94.46}]
+    OK (HTTP 200)
+  GET     /monitoreo/evaluar/1                       -> 200 {"alerta_registrada":false,"diagnostico":"El valor se encuentra dentro del rango operativo seguro.","evaluacion":"NORMAL","sensor_id":"1","timestamp_e
+    OK (HTTP 200)
+ Recuperado:
+  GET     /sensores                                  -> 200 [{"activo":true,"id":1,"nombre":"Temperatura sala","tipo":"temperatura","ubicacion":"sala"},{"activo":true,"id":2,"nombre":"Temperatura cocina","tipo"
+    OK (HTTP 200)
+
+=== Persistencia: se recrean los contenedores de aplicación SIN borrar volúmenes ===
+  POST    /sensores                                  -> 201 {"activo":true,"id":8,"nombre":"Sensor persistente","tipo":"temperatura","ubicacion":"lab"}
+    OK (HTTP 201)
+  POST    /monitoreo/umbrales                        -> 201 {"id":6,"maximo":900.0,"minimo":10.0,"tipo":"luz","unidad":"lx"}
+    OK (HTTP 201)
+ Tras recrear los contenedores:
+  GET     /sensores/8                                -> 200 {"activo":true,"id":8,"nombre":"Sensor persistente","tipo":"temperatura","ubicacion":"lab"}
+    OK (HTTP 200)
+  GET     /monitoreo/umbrales/6                      -> 200 {"id":6,"maximo":900.0,"minimo":10.0,"tipo":"luz","unidad":"lx"}
+    OK (HTTP 200)
+  GET     /mediciones?limit=1                        -> 200 [{"id":354,"sensor_id":"8","timestamp":"2026-11-21T16:57:21.045000+00:00","unidad":"C","valor":31.61}]
+    OK (HTTP 200)
+
+RESULTADO: todas las comprobaciones pasaron

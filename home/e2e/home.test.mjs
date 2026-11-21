@@ -483,8 +483,8 @@ describe('nginx.conf: reglas de acceso', () => {
         assert.match(mapa, /default\s+0;/);
     });
 
-    it('/mediciones y /monitoreo deniegan la escritura sin credenciales', () => {
-        for (const inicio of ['location ~ ^/mediciones(/|$)', 'location ~ ^/monitoreo(/|$)']) {
+    it('/mediciones, /monitoreo y /sensores deniegan la escritura sin credenciales', () => {
+        for (const inicio of ['location ~ ^/mediciones(/|$)', 'location ~ ^/monitoreo(/|$)', 'location ~ ^/sensores(/|$)']) {
             assert.match(bloque(inicio), /if \(\$denegar\) \{\s*return 401;/, inicio);
         }
     });
@@ -503,8 +503,15 @@ describe('nginx.conf: reglas de acceso', () => {
         assert.match(respuesta, /default_type application\/json;/);
     });
 
-    it('las credenciales no se reenvían a las APIs', () => {
+    it('las credenciales se reenvían al Gateway, que las vuelve a validar', () => {
         const proxy = fs.readFileSync(path.join(HOME, 'proxy_params.conf'), 'utf8');
-        assert.match(proxy, /proxy_set_header Authorization "";/);
+        assert.match(proxy, /proxy_set_header Authorization \$http_authorization;/);
+    });
+
+    it('todas las rutas de datos pasan por el API Gateway', () => {
+        assert.doesNotMatch(conf, /http:\/\/(mediciones|monitoreo|sensores):/);
+        for (const ruta of ['mediciones', 'monitoreo', 'sensores']) {
+            assert.match(bloque(`location ~ ^/${ruta}(/|$)`), /set \$gateway http:\/\/gateway:8000;/, ruta);
+        }
     });
 });

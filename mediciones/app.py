@@ -1,11 +1,13 @@
 import os
 import sys
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import mysql.connector
 import requests
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from database import conectar, inicializar
 
@@ -43,6 +45,15 @@ def error_base_datos(err):
     if isinstance(err, mysql.connector.InterfaceError) or getattr(err, 'errno', None) in ERRNOS_CONEXION:
         return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
     return jsonify({'error': 'error interno de la base de datos'}), 500
+
+
+@app.errorhandler(Exception)
+def error_generico(err):
+    """Cualquier error no previsto responde JSON (nunca la página HTML de Flask)."""
+    if isinstance(err, HTTPException):
+        return jsonify({'error': err.description}), err.code
+    app.logger.exception(err)
+    return jsonify({'error': 'error interno del servidor'}), 500
 
 
 def a_iso(momento):
@@ -132,6 +143,46 @@ def unidad_valida(unidad):
     if isinstance(unidad, str) and len(unidad) <= 10:
         return unidad, True
     return None, False
+
+
+# ---------------------------------------------------------------- Simulación de demora (pruebas de Timeout)
+# Permite demostrar el Timeout de Monitoreo: con una demora mayor que MEDICIONES_TIMEOUT, las consultas
+# de Monitoreo fallan con 504. El valor se guarda en un archivo para que lo compartan los workers.
+ARCHIVO_DEMORA = os.environ.get('ARCHIVO_DEMORA', '/tmp/demora_segundos')
+RUTA_DEMORA = '/mediciones/simulacion/demora'
+
+
+def demora_actual():
+    try:
+        with open(ARCHIVO_DEMORA, encoding='utf-8') as archivo:
+            return max(0.0, float(archivo.read().strip() or 0))
+    except (OSError, ValueError):
+        return float(os.environ.get('DELAY_SEGUNDOS', 0) or 0)
+
+
+@app.before_request
+def aplicar_demora():
+    if request.path not in ('/health', RUTA_DEMORA):
+        pausa = demora_actual()
+        if pausa > 0:
+            time.sleep(pausa)
+
+
+@app.route(RUTA_DEMORA, methods=['GET'])
+def consultar_demora():
+    return jsonify({'demora_segundos': demora_actual()}), 200
+
+
+@app.route(RUTA_DEMORA, methods=['PUT'])
+def fijar_demora():
+    """Body: {"segundos": 5}. Con 0 se restablece el comportamiento normal."""
+    data = request.get_json(silent=True)
+    segundos = a_numero(data.get('segundos')) if isinstance(data, dict) else None
+    if segundos is None or not 0 <= segundos <= 60:
+        return jsonify({'error': 'segundos debe ser un número entre 0 y 60'}), 400
+    with open(ARCHIVO_DEMORA, 'w', encoding='utf-8') as archivo:
+        archivo.write(str(segundos))
+    return jsonify({'mensaje': 'demora actualizada', 'demora_segundos': segundos}), 200
 
 
 @app.route('/health', methods=['GET'])

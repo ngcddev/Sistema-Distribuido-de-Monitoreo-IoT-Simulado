@@ -1,5 +1,6 @@
-# Solo Home (8080) queda publicado. Las APIs y las bases viven en la red interna de Compose.
-# Para exponer los puertos de las APIs en desarrollo: compose.dev.yaml (ver README).
+# Se publican solo dos puertos: Home (8080, interfaz web) y el API Gateway (8000, punto de entrada
+# de las APIs). Los microservicios y las bases viven en la red interna `red_iot` y solo se alcanzan
+# a través del Gateway. Para exponer también los puertos de cada API (desarrollo): compose.dev.yaml.
 
 x-mysql: &mysql
   image: mysql:8.4
@@ -11,6 +12,16 @@ x-mysql: &mysql
     retries: 10
     start_period: 20s
 
+x-red: &red
+  networks: [red_iot]
+
+# Parámetros de tolerancia a fallos (valores por defecto documentados en el README).
+x-tolerancia: &tolerancia
+  MEDICIONES_TIMEOUT: ${MEDICIONES_TIMEOUT:-3}
+  SENSORES_TIMEOUT: ${SENSORES_TIMEOUT:-2}
+  CB_MAX_FAILS: ${CB_MAX_FAILS:-3}
+  CB_TIMEOUT: ${CB_TIMEOUT:-10}
+
 x-api-env: &api-env
   DB_USER: ${DB_USER:?Define DB_USER en .env (copiar de .env.example)}
   DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env (copiar de .env.example)}
@@ -18,7 +29,7 @@ x-api-env: &api-env
 services:
 
   mysql_mediciones:
-    <<: *mysql
+    <<: [*mysql, *red]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
       MYSQL_DATABASE: mediciones
@@ -28,7 +39,7 @@ services:
       - mysql_mediciones_data:/var/lib/mysql
 
   mysql_sensores:
-    <<: *mysql
+    <<: [*mysql, *red]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
       MYSQL_DATABASE: sensores
@@ -38,7 +49,7 @@ services:
       - mysql_sensores_data:/var/lib/mysql
 
   mysql_monitoreo:
-    <<: *mysql
+    <<: [*mysql, *red]
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Define MYSQL_ROOT_PASSWORD en .env}
       MYSQL_DATABASE: monitoreo
@@ -48,12 +59,14 @@ services:
       - mysql_monitoreo_data:/var/lib/mysql
 
   mediciones:
+    <<: *red
     build: ./mediciones
     restart: unless-stopped
     environment:
       <<: *api-env
       DB_HOST: mysql_mediciones
       DB_NAME: mediciones
+      DELAY_SEGUNDOS: ${DELAY_SEGUNDOS:-0}  # demora inicial simulada (pruebas de Timeout)
       SENSORES_URL: http://sensores:5003  # valida que el sensor exista; si Sensores cae, no bloquea
     depends_on:
       mysql_mediciones:
@@ -68,6 +81,7 @@ services:
       start_period: 10s
 
   sensores:
+    <<: *red
     build: ./sensores
     restart: unless-stopped
     environment:
@@ -85,10 +99,11 @@ services:
       start_period: 10s
 
   monitoreo:
+    <<: *red
     build: ./monitoreo
     restart: unless-stopped
     environment:
-      <<: *api-env
+      <<: [*api-env, *tolerancia]
       DB_HOST: mysql_monitoreo
       DB_NAME: monitoreo
       MEDICIONES_URL: http://mediciones:5001
@@ -109,11 +124,12 @@ services:
 
   # Evalúa automáticamente las lecturas nuevas y registra las alertas (misma imagen que monitoreo).
   evaluador:
+    <<: *red
     build: ./monitoreo
     command: ["python", "worker.py"]
     restart: unless-stopped
     environment:
-      <<: *api-env
+      <<: [*api-env, *tolerancia]
       DB_HOST: mysql_monitoreo
       DB_NAME: monitoreo
       MEDICIONES_URL: http://mediciones:5001
@@ -126,6 +142,7 @@ services:
 
   # Borra cada hora las lecturas más antiguas que RETENCION_DIAS (misma imagen que mediciones).
   purgador:
+    <<: *red
     build: ./mediciones
     command: ["python", "purga.py"]
     restart: unless-stopped
@@ -140,6 +157,7 @@ services:
         condition: service_healthy
 
   simulador:
+    <<: *red
     build: ./simulador
     restart: unless-stopped
     environment:
@@ -152,7 +170,37 @@ services:
       sensores:
         condition: service_healthy
 
+  # Punto de entrada único de las APIs: reenvía a Sensores, Mediciones y Monitoreo.
+  gateway:
+    <<: *red
+    build: ./gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      SENSOR_SERVICE_URL: http://sensores:5003
+      MEDICIONES_SERVICE_URL: http://mediciones:5001
+      MONITOREO_SERVICE_URL: http://monitoreo:5002
+      GATEWAY_TIMEOUT: ${GATEWAY_TIMEOUT:-8}
+      # Mismas credenciales que el Home: modificar datos por el Gateway también las exige.
+      GATEWAY_ADMIN_USER: ${HOME_ADMIN_USER:?Define HOME_ADMIN_USER en .env (copiar de .env.example)}
+      GATEWAY_ADMIN_PASSWORD: ${HOME_ADMIN_PASSWORD:?Define HOME_ADMIN_PASSWORD en .env (copiar de .env.example)}
+    depends_on:
+      mediciones:
+        condition: service_healthy
+      sensores:
+        condition: service_healthy
+      monitoreo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
   home:
+    <<: *red
     build: ./home
     restart: unless-stopped
     ports:
@@ -162,9 +210,7 @@ services:
       HOME_ADMIN_USER: ${HOME_ADMIN_USER:?Define HOME_ADMIN_USER en .env (copiar de .env.example)}
       HOME_ADMIN_PASSWORD: ${HOME_ADMIN_PASSWORD:?Define HOME_ADMIN_PASSWORD en .env (copiar de .env.example)}
     depends_on:
-      mediciones:
-        condition: service_healthy
-      monitoreo:
+      gateway:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
@@ -172,6 +218,10 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+networks:
+  red_iot:
+    name: red_iot
 
 volumes:
   mysql_mediciones_data:

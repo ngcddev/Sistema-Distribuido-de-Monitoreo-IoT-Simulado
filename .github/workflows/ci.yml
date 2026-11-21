@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        servicio: [mediciones, monitoreo, sensores, simulador]
+        servicio: [gateway, mediciones, monitoreo, sensores, simulador]
 
     steps:
       - name: Descargar el código del PR

@@ -5,7 +5,10 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 bind = '0.0.0.0:5002'
-workers = 2
+# Un solo proceso: el estado del Circuit Breaker vive en memoria y debe ser único para todas las
+# solicitudes. Los hilos atienden la concurrencia (pybreaker es seguro entre hilos).
+workers = 1
+threads = 8
 timeout = 30
 accesslog = '-'
 

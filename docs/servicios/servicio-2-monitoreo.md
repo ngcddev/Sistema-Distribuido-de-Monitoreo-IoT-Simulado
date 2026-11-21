@@ -28,9 +28,24 @@ API REST (Flask) que analiza las mediciones: calcula resúmenes por sensor y glo
 | PUT | `/monitoreo/umbrales/<id>` | Reemplaza un umbral | `200`, `400`, `404` |
 | DELETE | `/monitoreo/umbrales/<id>` | Elimina un umbral | `200`, `404` |
 | GET | `/monitoreo/alertas` | Lista alertas. Filtros: `sensor_id`, `limit` (por defecto 50, máx. 500) | `200`, `400` |
+| GET | `/monitoreo/alertas/<id>` | Obtiene una alerta | `200`, `404` |
 | DELETE | `/monitoreo/alertas/<id>` | Elimina una alerta | `200`, `404` |
+| GET | `/monitoreo/circuitos` | Estado de los Circuit Breakers, contador de fallos y configuración | `200` |
 
 `/monitoreo/evaluar/<sensor_id>` devuelve `evaluacion` = `NORMAL`, `ALERTA_CRITICA` o `SIN_UMBRAL`, y `alerta_registrada` (`true` solo con `POST` y fuera de rango). El tipo del sensor se obtiene del servicio Sensores; si no responde, se deduce de la unidad (`C` → temperatura, `%` → humedad). Se guarda una sola alerta por medición. Si Mediciones no está disponible, responde `503`.
+
+## Tolerancia a fallos
+
+Las llamadas a Mediciones y a Sensores tienen timeout y Circuit Breaker (`pybreaker`):
+
+| Dependencia | Timeout | Umbral / recuperación | Respuesta si falla |
+|---|---|---|---|
+| Mediciones | `MEDICIONES_TIMEOUT` (3 s) | `CB_MAX_FAILS` (3) / `CB_TIMEOUT` (10 s) | `504` timeout, `503` sin conexión o circuito abierto, `502` si Mediciones responde 5xx |
+| Sensores | `SENSORES_TIMEOUT` (2 s) | igual | La evaluación continúa: el tipo se deduce de la unidad de la lectura |
+
+Solo las fallas técnicas (timeout, conexión, 5xx) cuentan para abrir el circuito; un 404 no. El estado
+(`CLOSED`, `OPEN`, `HALF_OPEN`) se consulta en `GET /monitoreo/circuitos`. Corre con un solo proceso de gunicorn
+(8 hilos) para que el estado del circuito sea único. Cualquier error no previsto responde JSON con `500`.
 
 ## Evaluación automática (Evaluador)
 
