@@ -1,7 +1,6 @@
 name: CI
 
 # Se dispara en cada Pull Request hacia main.
-# Ampliar más adelante con "push" a main si lo necesitan.
 on:
   pull_request:
     branches: [ main ]
@@ -15,8 +14,72 @@ jobs:
       - name: Descargar el código del PR
         uses: actions/checkout@v4
 
+      - name: Crear .env desde el ejemplo
+        run: cp .env.example .env
+
       - name: Verificar que docker-compose.yml es válido
         run: docker compose config -q
 
-      - name: Placeholder - todavía no hay tests
-        run: echo "CI funcionando. Agregar lint/tests cuando el equipo defina el stack."
+  pruebas:
+    name: Pruebas de ${{ matrix.servicio }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio: [gateway, monitoreo]
+
+    steps:
+      - name: Descargar el código del PR
+        uses: actions/checkout@v4
+
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependencias
+        run: pip install -r ${{ matrix.servicio }}/requirements.txt -r requirements-dev.txt
+
+      - name: Ejecutar pruebas
+        working-directory: ${{ matrix.servicio }}
+        run: python -m pytest -q
+
+  compose:
+    name: Stack completo con Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código del PR
+        uses: actions/checkout@v4
+
+      - name: Crear .env desde el ejemplo
+        run: cp .env.example .env
+
+      - name: Levantar el stack y esperar a que todo esté saludable
+        run: docker compose up -d --build --wait --wait-timeout 180
+
+      - name: Prueba de humo a través del Gateway
+        run: |
+          curl -fsS localhost:8000/health | grep -q '"mediciones":"ok"'
+          curl -fsS localhost:8000/sensores > /dev/null
+          curl -fsS localhost:8000/mediciones > /dev/null
+          curl -fsS localhost:8000/monitoreo/umbrales > /dev/null
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/sensores/999999)" = 404
+          curl -fsS localhost:8000/monitoreo/circuitos | grep -q '"estado":"CLOSED"'
+          # Home llega a las APIs a través del Gateway
+          curl -fsS localhost:8080/ > /dev/null
+          curl -fsS localhost:8080/sensores > /dev/null
+          # Timeout: con Mediciones lento (6 s > 3 s) Monitoreo responde 504; se restablece al terminar
+          curl -fsS -X PUT localhost:8000/mediciones/simulacion/demora \
+            -H 'Content-Type: application/json' -d '{"segundos": 6}'
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:8000/monitoreo/resumen-general)" = 504
+          curl -fsS -X PUT localhost:8000/mediciones/simulacion/demora \
+            -H 'Content-Type: application/json' -d '{"segundos": 0}'
+
+      - name: Mostrar logs si algo falló
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Apagar el stack
+        if: always()
+        run: docker compose down -v
