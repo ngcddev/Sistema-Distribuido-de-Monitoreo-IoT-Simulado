@@ -360,3 +360,50 @@ h3 {
     font-size: 12px;
     color: #6b7280;
 }
+
+/* =========================================
+   VISTA DE SENSORES
+   ========================================= */
+.campo select {
+    padding: 8px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-weight: 400;
+    background-color: #ffffff;
+}
+
+.tabla-contenedor {
+    margin-top: 12px;
+    overflow-x: auto;
+}
+
+.tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.tabla th,
+.tabla td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.tabla th {
+    background-color: #f9fafb;
+    color: #374151;
+    font-weight: 600;
+}
+
+.tabla td.vacio {
+    text-align: center;
+    color: #6b7280;
+}
+
+.estado-activo { color: #047857; font-weight: 600; }
+.estado-inactivo { color: #6b7280; font-weight: 600; }
+
+.estado-ok { color: #10b981; }
+.estado-espera { color: #d97706; }
+.estado-error { color: #b91c1c; }

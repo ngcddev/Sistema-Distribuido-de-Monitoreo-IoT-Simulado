@@ -28,6 +28,9 @@
                     <a href="#" id="menu-general" class="menu-item active">
                         <span class="icon"></span> Vista general
                     </a>
+                    <a href="#" id="menu-sensores" class="menu-item">
+                        <span class="icon"></span> Sensores
+                    </a>
                     <a href="#" id="menu-admin" class="menu-item">
                         <span class="icon"></span> Administración
                     </a>
@@ -144,6 +147,51 @@
 
                     </div>
 
+                </div>
+
+                <div id="vista-sensores" class="main-card vista-oculta">
+                    <div class="card-header">
+                        <h2>Catálogo de sensores</h2>
+                        <p>Consulta del catálogo de sensores. Los datos vienen de <code>GET /sensores</code> a través del API Gateway.</p>
+                    </div>
+
+                    <div class="campos">
+                        <label class="campo">
+                            Filtrar por tipo
+                            <select id="filtro-tipo">
+                                <option value="">Todos</option>
+                                <option value="temperatura">temperatura</option>
+                                <option value="humedad">humedad</option>
+                            </select>
+                        </label>
+                        <label class="campo">
+                            Filtrar por estado
+                            <select id="filtro-activo">
+                                <option value="">Todos</option>
+                                <option value="true">Activos</option>
+                                <option value="false">Inactivos</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="botones">
+                        <button type="button" id="btn-sensores-listar" class="btn-primary">Actualizar lista</button>
+                    </div>
+
+                    <div id="sensores-estado" class="status-msg">Estado: En espera...</div>
+                    <div class="tabla-contenedor">
+                        <table id="tabla-sensores" class="tabla">
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Nombre</th>
+                                    <th>Tipo</th>
+                                    <th>Ubicación</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sensores-cuerpo"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <div id="vista-mediciones" class="main-card vista-oculta">

@@ -1,8 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     const vistaGeneral = document.getElementById('vista-monitoreo');
     const vistaAdmin = document.getElementById('vista-mediciones');
+    const vistaSensores = document.getElementById('vista-sensores');
     const menuGeneral = document.getElementById('menu-general');
     const menuAdmin = document.getElementById('menu-admin');
+    const menuSensores = document.getElementById('menu-sensores');
     const titulo = document.getElementById('titulo-vista');
     const statusText = document.getElementById('status');
     const resultado = document.getElementById('resultado');
@@ -12,20 +14,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const filaInput = document.getElementById('fila-id');
     const unidadInput = document.getElementById('unidad');
 
+    // Cada entrada del menú muestra una sola vista y oculta las demás.
+    const vistas = [
+        { menu: menuGeneral, vista: vistaGeneral, titulo: 'Vista general' },
+        { menu: menuSensores, vista: vistaSensores, titulo: 'Sensores' },
+        { menu: menuAdmin, vista: vistaAdmin, titulo: 'Administración' }
+    ];
+
+    function mostrarVista(elegida) {
+        vistas.forEach(function (v) {
+            const activa = v === elegida;
+            v.vista.classList.toggle('vista-oculta', !activa);
+            v.menu.classList.toggle('active', activa);
+        });
+        titulo.textContent = elegida.titulo;
+    }
+
     function mostrarGeneral() {
-        vistaGeneral.classList.remove('vista-oculta');
-        vistaAdmin.classList.add('vista-oculta');
-        menuGeneral.classList.add('active');
-        menuAdmin.classList.remove('active');
-        titulo.textContent = 'Vista general';
+        mostrarVista(vistas[0]);
+    }
+
+    function mostrarSensores() {
+        mostrarVista(vistas[1]);
+        listarSensores();
     }
 
     function mostrarAdmin() {
-        vistaGeneral.classList.add('vista-oculta');
-        vistaAdmin.classList.remove('vista-oculta');
-        menuGeneral.classList.remove('active');
-        menuAdmin.classList.add('active');
-        titulo.textContent = 'Administración';
+        mostrarVista(vistas[2]);
         consultarTotal();
     }
 
@@ -198,12 +213,96 @@ document.addEventListener('DOMContentLoaded', () => {
         event.preventDefault();
         mostrarAdmin();
     });
+    menuSensores.addEventListener('click', function (event) {
+        event.preventDefault();
+        mostrarSensores();
+    });
     document.getElementById('btn-get-total').addEventListener('click', consultarTotal);
     document.getElementById('btn-get-id').addEventListener('click', consultarPorId);
     document.getElementById('btn-post').addEventListener('click', function () { enviarMedicion('POST'); });
     document.getElementById('btn-put').addEventListener('click', function () { enviarMedicion('PUT'); });
     document.getElementById('btn-patch').addEventListener('click', function () { enviarMedicion('PATCH'); });
     document.getElementById('btn-delete').addEventListener('click', function () { enviarMedicion('DELETE'); });
+
+    // =========================================
+    // CATÁLOGO DE SENSORES (GET /sensores a través del Gateway)
+    // Se construye el DOM con createElement/textContent: sin innerHTML ni estilos en línea.
+    // =========================================
+    const sensoresEstado = document.getElementById('sensores-estado');
+    const sensoresCuerpo = document.getElementById('sensores-cuerpo');
+    const filtroTipo = document.getElementById('filtro-tipo');
+    const filtroActivo = document.getElementById('filtro-activo');
+
+    function estadoSensores(texto, clase) {
+        sensoresEstado.textContent = texto;
+        sensoresEstado.classList.remove('estado-ok', 'estado-espera', 'estado-error');
+        sensoresEstado.classList.add(clase);
+    }
+
+    async function pedirJson(url, opciones) {
+        const respuesta = await fetch(url, opciones);
+        const data = await respuesta.json().catch(function () { return {}; });
+        if (!respuesta.ok) {
+            throw new Error(data.error || ('Sensores respondió ' + respuesta.status));
+        }
+        return { codigo: respuesta.status, data: data };
+    }
+
+    function celda(texto, clase) {
+        const td = document.createElement('td');
+        td.textContent = texto;
+        if (clase) {
+            td.className = clase;
+        }
+        return td;
+    }
+
+    function filaSensor(sensor) {
+        const tr = document.createElement('tr');
+        tr.dataset.id = sensor.id;
+        tr.appendChild(celda(sensor.id));
+        tr.appendChild(celda(sensor.nombre));
+        tr.appendChild(celda(sensor.tipo));
+        tr.appendChild(celda(sensor.ubicacion || '—'));
+        tr.appendChild(celda(sensor.activo ? 'Activo' : 'Inactivo', sensor.activo ? 'estado-activo' : 'estado-inactivo'));
+        return tr;
+    }
+
+    function pintarSensores(sensores) {
+        const filas = sensores.length ? sensores.map(filaSensor) : (function () {
+            const tr = document.createElement('tr');
+            const td = celda('No hay sensores con esos filtros.', 'vacio');
+            td.colSpan = 5;
+            tr.appendChild(td);
+            return [tr];
+        })();
+        sensoresCuerpo.replaceChildren.apply(sensoresCuerpo, filas);
+    }
+
+    async function listarSensores() {
+        const parametros = new URLSearchParams();
+        if (filtroTipo.value) {
+            parametros.set('tipo', filtroTipo.value);
+        }
+        if (filtroActivo.value) {
+            parametros.set('activo', filtroActivo.value);
+        }
+        const consulta = parametros.toString();
+        const url = '/sensores' + (consulta ? '?' + consulta : '');
+        estadoSensores('Consultando ' + url + '...', 'estado-espera');
+        try {
+            const r = await pedirJson(url);
+            pintarSensores(r.data);
+            estadoSensores('GET ' + url + ' ' + r.codigo + ' (' + r.data.length + ' sensores)', 'estado-ok');
+        } catch (error) {
+            sensoresCuerpo.replaceChildren();
+            estadoSensores(error.message, 'estado-error');
+        }
+    }
+
+    document.getElementById('btn-sensores-listar').addEventListener('click', listarSensores);
+    filtroTipo.addEventListener('change', listarSensores);
+    filtroActivo.addEventListener('change', listarSensores);
 
     // =========================================
     // INTEGRACIÓN CON MICROSERVICIO DE MONITOREO Y GRÁFICO
