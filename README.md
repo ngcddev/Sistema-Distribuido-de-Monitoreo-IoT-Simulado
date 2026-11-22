@@ -118,6 +118,9 @@ Scripts de referencia en [bases_datos/](bases_datos/).
 | Sensores | `mysql_sensores` | `sensores` | `sensores` |
 | Monitoreo | `mysql_monitoreo` | `monitoreo` | `umbrales`, `alertas` |
 
+Tabla completa de **microservicio, base de datos, tablas principales y operaciones implementadas**, con la
+estructura de cada tabla: [bases_datos/README.md](bases_datos/README.md#microservicios-bases-de-datos-y-operaciones).
+
 ## Variables de entorno
 
 Se definen en `.env` (copiar de [.env.example](.env.example)). Todas tienen valor por
