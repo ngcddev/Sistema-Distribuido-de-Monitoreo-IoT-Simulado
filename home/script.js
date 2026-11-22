@@ -225,13 +225,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('btn-delete').addEventListener('click', function () { enviarMedicion('DELETE'); });
 
     // =========================================
-    // CATÁLOGO DE SENSORES (GET /sensores a través del Gateway)
+    // CATÁLOGO DE SENSORES (GET/POST/PUT/DELETE /sensores a través del Gateway)
     // Se construye el DOM con createElement/textContent: sin innerHTML ni estilos en línea.
     // =========================================
     const sensoresEstado = document.getElementById('sensores-estado');
     const sensoresCuerpo = document.getElementById('sensores-cuerpo');
     const filtroTipo = document.getElementById('filtro-tipo');
     const filtroActivo = document.getElementById('filtro-activo');
+    const formSensor = document.getElementById('form-sensor');
+    const sensorNombre = document.getElementById('sensor-nombre');
+    const sensorTipo = document.getElementById('sensor-tipo');
+    const sensorUbicacion = document.getElementById('sensor-ubicacion');
+    const sensorActivo = document.getElementById('sensor-activo');
 
     function estadoSensores(texto, clase) {
         sensoresEstado.textContent = texto;
@@ -257,6 +262,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return td;
     }
 
+    function boton(texto, clase, alPulsar) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = clase;
+        b.textContent = texto;
+        b.addEventListener('click', alPulsar);
+        return b;
+    }
+
     function filaSensor(sensor) {
         const tr = document.createElement('tr');
         tr.dataset.id = sensor.id;
@@ -265,6 +279,18 @@ document.addEventListener('DOMContentLoaded', () => {
         tr.appendChild(celda(sensor.tipo));
         tr.appendChild(celda(sensor.ubicacion || '—'));
         tr.appendChild(celda(sensor.activo ? 'Activo' : 'Inactivo', sensor.activo ? 'estado-activo' : 'estado-inactivo'));
+
+        const acciones = document.createElement('td');
+        const contenedor = document.createElement('div');
+        contenedor.className = 'acciones';
+        contenedor.appendChild(boton(sensor.activo ? 'Desactivar' : 'Activar', 'btn-secondary', function () {
+            cambiarActivo(sensor);
+        }));
+        contenedor.appendChild(boton('Eliminar', 'btn-danger', function () {
+            eliminarSensor(sensor);
+        }));
+        acciones.appendChild(contenedor);
+        tr.appendChild(acciones);
         return tr;
     }
 
@@ -272,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const filas = sensores.length ? sensores.map(filaSensor) : (function () {
             const tr = document.createElement('tr');
             const td = celda('No hay sensores con esos filtros.', 'vacio');
-            td.colSpan = 5;
+            td.colSpan = 6;
             tr.appendChild(td);
             return [tr];
         })();
@@ -300,9 +326,72 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function crearSensor(event) {
+        event.preventDefault();
+        const nombre = sensorNombre.value.trim();
+        if (!nombre) {
+            estadoSensores('Escribe el nombre del sensor.', 'estado-error');
+            return;
+        }
+        estadoSensores('POST /sensores...', 'estado-espera');
+        try {
+            const r = await pedirJson('/sensores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre: nombre,
+                    tipo: sensorTipo.value,
+                    ubicacion: sensorUbicacion.value.trim() || null,
+                    activo: sensorActivo.checked
+                })
+            });
+            formSensor.reset();
+            sensorActivo.checked = true;
+            await listarSensores();
+            estadoSensores('POST /sensores ' + r.codigo + ': creado el sensor ' + r.data.id, 'estado-ok');
+        } catch (error) {
+            estadoSensores(error.message, 'estado-error');
+        }
+    }
+
+    async function cambiarActivo(sensor) {
+        estadoSensores('PUT /sensores/' + sensor.id + '...', 'estado-espera');
+        try {
+            const r = await pedirJson('/sensores/' + encodeURIComponent(sensor.id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombre: sensor.nombre,
+                    tipo: sensor.tipo,
+                    ubicacion: sensor.ubicacion,
+                    activo: !sensor.activo
+                })
+            });
+            await listarSensores();
+            estadoSensores('PUT /sensores/' + sensor.id + ' ' + r.codigo + ': ' + (r.data.activo ? 'activado' : 'desactivado'), 'estado-ok');
+        } catch (error) {
+            estadoSensores(error.message, 'estado-error');
+        }
+    }
+
+    async function eliminarSensor(sensor) {
+        if (!window.confirm('¿Eliminar el sensor ' + sensor.id + ' (' + sensor.nombre + ')?')) {
+            return;
+        }
+        estadoSensores('DELETE /sensores/' + sensor.id + '...', 'estado-espera');
+        try {
+            const r = await pedirJson('/sensores/' + encodeURIComponent(sensor.id), { method: 'DELETE' });
+            await listarSensores();
+            estadoSensores('DELETE /sensores/' + sensor.id + ' ' + r.codigo + ': ' + (r.data.mensaje || 'eliminado'), 'estado-ok');
+        } catch (error) {
+            estadoSensores(error.message, 'estado-error');
+        }
+    }
+
     document.getElementById('btn-sensores-listar').addEventListener('click', listarSensores);
     filtroTipo.addEventListener('change', listarSensores);
     filtroActivo.addEventListener('change', listarSensores);
+    formSensor.addEventListener('submit', crearSensor);
 
     // =========================================
     // INTEGRACIÓN CON MICROSERVICIO DE MONITOREO Y GRÁFICO

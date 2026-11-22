@@ -372,6 +372,14 @@ h3 {
     background-color: #ffffff;
 }
 
+.campo-check {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    align-self: end;
+    padding-bottom: 8px;
+}
+
 .tabla-contenedor {
     margin-top: 12px;
     overflow-x: auto;
@@ -399,6 +407,16 @@ h3 {
 .tabla td.vacio {
     text-align: center;
     color: #6b7280;
+}
+
+.tabla .acciones {
+    display: flex;
+    gap: 6px;
+}
+
+.tabla .acciones button {
+    padding: 6px 10px;
+    font-size: 13px;
 }
 
 .estado-activo { color: #047857; font-weight: 600; }
