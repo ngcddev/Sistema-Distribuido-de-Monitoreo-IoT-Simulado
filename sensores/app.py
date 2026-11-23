@@ -2,10 +2,21 @@ from contextlib import contextmanager
 
 import mysql.connector
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from database import conectar, inicializar
 
 app = Flask(__name__)
+
+
+@app.errorhandler(Exception)
+def error_generico(err):
+    """Responde JSON ante cualquier error, sin páginas HTML de Flask."""
+    if isinstance(err, HTTPException):
+        return jsonify({'error': err.description}), err.code
+    app.logger.exception(err)
+    return jsonify({'error': 'error interno del servidor'}), 500
+
 
 TIPOS_VALIDOS = ('temperatura', 'humedad')
 
@@ -24,11 +35,6 @@ def cursor_bd(commit=False):
             cursor.close()
     finally:
         conexion.close()
-
-
-@app.errorhandler(mysql.connector.Error)
-def error_base_datos(_err):
-    return jsonify({'error': 'no se pudo conectar con la base de datos'}), 503
 
 
 def serializar(fila):
@@ -97,17 +103,23 @@ def listar_sensores():
         consulta += ' WHERE ' + ' AND '.join(condiciones)
     consulta += ' ORDER BY id'
 
-    with cursor_bd() as cursor:
-        cursor.execute(consulta, parametros)
-        filas = cursor.fetchall()
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute(consulta, parametros)
+            filas = cursor.fetchall()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     return jsonify([serializar(f) for f in filas]), 200
 
 
 @app.route('/sensores/<int:sensor_id>', methods=['GET'])
 def obtener_sensor(sensor_id):
-    with cursor_bd() as cursor:
-        cursor.execute('SELECT * FROM sensores WHERE id = %s', (sensor_id,))
-        fila = cursor.fetchone()
+    try:
+        with cursor_bd() as cursor:
+            cursor.execute('SELECT * FROM sensores WHERE id = %s', (sensor_id,))
+            fila = cursor.fetchone()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not fila:
         return jsonify({'error': 'sensor no encontrado'}), 404
     return jsonify(serializar(fila)), 200
@@ -121,14 +133,17 @@ def crear_sensor():
 
     campos.setdefault('ubicacion', None)
     campos.setdefault('activo', 1)
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute(
-            'INSERT INTO sensores (nombre, tipo, ubicacion, activo) VALUES (%s, %s, %s, %s)',
-            (campos['nombre'], campos['tipo'], campos['ubicacion'], campos['activo']),
-        )
-        nuevo_id = cursor.lastrowid
-        cursor.execute('SELECT * FROM sensores WHERE id = %s', (nuevo_id,))
-        fila = cursor.fetchone()
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute(
+                'INSERT INTO sensores (nombre, tipo, ubicacion, activo) VALUES (%s, %s, %s, %s)',
+                (campos['nombre'], campos['tipo'], campos['ubicacion'], campos['activo']),
+            )
+            nuevo_id = cursor.lastrowid
+            cursor.execute('SELECT * FROM sensores WHERE id = %s', (nuevo_id,))
+            fila = cursor.fetchone()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     return jsonify(serializar(fila)), 201
 
 
@@ -140,23 +155,29 @@ def actualizar_sensor(sensor_id):
 
     campos.setdefault('ubicacion', None)
     campos.setdefault('activo', 1)
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute(
-            'UPDATE sensores SET nombre = %s, tipo = %s, ubicacion = %s, activo = %s WHERE id = %s',
-            (campos['nombre'], campos['tipo'], campos['ubicacion'], campos['activo'], sensor_id),
-        )
-        if cursor.rowcount == 0:
-            return jsonify({'error': 'sensor no encontrado'}), 404
-        cursor.execute('SELECT * FROM sensores WHERE id = %s', (sensor_id,))
-        fila = cursor.fetchone()
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute(
+                'UPDATE sensores SET nombre = %s, tipo = %s, ubicacion = %s, activo = %s WHERE id = %s',
+                (campos['nombre'], campos['tipo'], campos['ubicacion'], campos['activo'], sensor_id),
+            )
+            if cursor.rowcount == 0:
+                return jsonify({'error': 'sensor no encontrado'}), 404
+            cursor.execute('SELECT * FROM sensores WHERE id = %s', (sensor_id,))
+            fila = cursor.fetchone()
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     return jsonify(serializar(fila)), 200
 
 
 @app.route('/sensores/<int:sensor_id>', methods=['DELETE'])
 def eliminar_sensor(sensor_id):
-    with cursor_bd(commit=True) as cursor:
-        cursor.execute('DELETE FROM sensores WHERE id = %s', (sensor_id,))
-        eliminado = cursor.rowcount > 0
+    try:
+        with cursor_bd(commit=True) as cursor:
+            cursor.execute('DELETE FROM sensores WHERE id = %s', (sensor_id,))
+            eliminado = cursor.rowcount > 0
+    except mysql.connector.Error:
+        return jsonify({'status': 'error', 'detalle': 'base de datos no disponible'}), 503
     if not eliminado:
         return jsonify({'error': 'sensor no encontrado'}), 404
     return jsonify({'mensaje': 'sensor eliminado correctamente', 'id': sensor_id}), 200
