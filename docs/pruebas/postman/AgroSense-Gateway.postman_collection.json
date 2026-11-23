@@ -1,0 +1,1598 @@
+{
+  "info": {
+    "_postman_id": "00000000-0000-0041-6772-6f53656e7365",
+    "name": "AgroSense - API Gateway (tercer avance)",
+    "description": "Colección para probar AgroSense a través del API Gateway (`{{gateway}}` = http://localhost:8000).\n\nRequisito: `docker compose up -d --build`. Ejecutar las carpetas en orden con *Run collection*: cada CRUD guarda el id creado en una variable de la colección y lo usa en los pasos siguientes.\n\nAutenticación: esta versión del Gateway no la exige (la colección usa *No Auth*). Si el equipo activa Basic Auth (`HOME_ADMIN_USER` / `HOME_ADMIN_PASSWORD`), cambiar la pestaña *Authorization* de la colección a *Basic Auth* con `{{admin_user}}` / `{{admin_password}}`.\n\nOrigen: docs/endpoints/postman-endpoints.txt.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "gateway",
+      "value": "http://localhost:8000"
+    },
+    {
+      "key": "sensor_id",
+      "value": "1"
+    },
+    {
+      "key": "medicion_id",
+      "value": "1"
+    },
+    {
+      "key": "umbral_id",
+      "value": "1"
+    },
+    {
+      "key": "admin_user",
+      "value": ""
+    },
+    {
+      "key": "admin_password",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Gateway",
+      "item": [
+        {
+          "name": "Rutas del Gateway",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": []
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Health (Gateway y servicios)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.test('Todos los servicios ok', function () {",
+                  "  const s = pm.response.json().servicios;",
+                  "  pm.expect(s.sensores).to.eql('ok'); pm.expect(s.mediciones).to.eql('ok'); pm.expect(s.monitoreo).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/health",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. CRUD Sensores",
+      "item": [
+        {
+          "name": "Listar sensores",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar sensores (filtros)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores?tipo=temperatura&activo=true",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores"
+              ],
+              "query": [
+                {
+                  "key": "tipo",
+                  "value": "temperatura"
+                },
+                {
+                  "key": "activo",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Crear sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('sensor_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/sensores",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sensor demo\",\n  \"tipo\": \"humedad\",\n  \"ubicacion\": \"laboratorio\",\n  \"activo\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores/{{sensor_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores",
+                "{{sensor_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reemplazar sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.test('Se guardó la modificación', function () { pm.expect(pm.response.json().nombre).to.eql('Sensor demo editado'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/sensores/{{sensor_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores",
+                "{{sensor_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Sensor demo editado\",\n  \"tipo\": \"humedad\",\n  \"ubicacion\": \"laboratorio\",\n  \"activo\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores/{{sensor_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores",
+                "{{sensor_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener sensor eliminado (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores/{{sensor_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores",
+                "{{sensor_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. CRUD Mediciones",
+      "item": [
+        {
+          "name": "Listar mediciones",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar mediciones (sensor y límite)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones?sensor_id=1&limit=10",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones"
+              ],
+              "query": [
+                {
+                  "key": "sensor_id",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Crear medición",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('medicion_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sensor_id\": 1,\n  \"valor\": 22.5,\n  \"unidad\": \"C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener medición",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones/{{medicion_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "{{medicion_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Mediciones de un sensor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones/sensor/1",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "sensor",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reemplazar medición",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones/{{medicion_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "{{medicion_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sensor_id\": 1,\n  \"valor\": 23.1,\n  \"unidad\": \"C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actualizar valor (PATCH)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.test('Valor actualizado', function () { pm.expect(pm.response.json().valor).to.eql(24); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones/{{medicion_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "{{medicion_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valor\": 24\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar medición",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones/{{medicion_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "{{medicion_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener medición eliminada (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones/{{medicion_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "{{medicion_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. CRUD Umbrales (Monitoreo)",
+      "item": [
+        {
+          "name": "Listar umbrales",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Crear umbral",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.collectionVariables.set('umbral_id', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"presion_demo\",\n  \"minimo\": 1,\n  \"maximo\": 5,\n  \"unidad\": \"bar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Crear umbral repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"presion_demo\",\n  \"minimo\": 1,\n  \"maximo\": 5,\n  \"unidad\": \"bar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener umbral",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales/{{umbral_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales",
+                "{{umbral_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reemplazar umbral",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales/{{umbral_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales",
+                "{{umbral_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"presion_demo\",\n  \"minimo\": 2,\n  \"maximo\": 6,\n  \"unidad\": \"bar\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar umbral",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales/{{umbral_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales",
+                "{{umbral_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Obtener umbral eliminado (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/umbrales/{{umbral_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "umbrales",
+                "{{umbral_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Análisis y alertas (Monitoreo)",
+      "item": [
+        {
+          "name": "Lectura fuera de rango (para generar alerta)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sensor_id\": 1,\n  \"valor\": 50,\n  \"unidad\": \"C\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Evaluar sensor 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "pm.test('Devuelve una evaluación', function () { pm.expect(pm.response.json()).to.have.property('evaluacion'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/evaluar/1",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "evaluar",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resumen del sensor 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/1",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resumen general",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/resumen-general",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "resumen-general"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Listar alertas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/alertas?limit=10",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "alertas"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Alertas del sensor 1",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/alertas?sensor_id=1&limit=10",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "alertas"
+              ],
+              "query": [
+                {
+                  "key": "sensor_id",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Alerta inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/alertas/999999",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "alertas",
+                "999999"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Eliminar alerta inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/alertas/999999",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "alertas",
+                "999999"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Circuit Breaker",
+      "item": [
+        {
+          "name": "Estado de los circuitos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });",
+                  "const c = pm.response.json();",
+                  "console.log('mediciones:', c.mediciones.estado, 'fallos:', c.mediciones.contador_fallos);",
+                  "pm.test('Estado válido', function () { pm.expect(['CLOSED','OPEN','HALF_OPEN']).to.include(c.mediciones.estado); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/circuitos",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "circuitos"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Para ver CLOSED -> OPEN -> HALF_OPEN -> CLOSED: `docker compose stop mediciones`, enviar 3 veces *Resumen general* (503), consultar *Estado de los circuitos* (OPEN), `docker compose start mediciones`, esperar 10 s (HALF_OPEN) y enviar *Resumen general* (200, vuelve a CLOSED)."
+    },
+    {
+      "name": "6. Timeout",
+      "item": [
+        {
+          "name": "Ver demora simulada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/mediciones/simulacion/demora",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "simulacion",
+                "demora"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Activar demora de 6 s",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones/simulacion/demora",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "simulacion",
+                "demora"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segundos\": 6\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resumen general con Mediciones lento (504)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 504', function () { pm.response.to.have.status(504); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/monitoreo/resumen-general",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "monitoreo",
+                "resumen-general"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Quitar demora",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones/simulacion/demora",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones",
+                "simulacion",
+                "demora"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"segundos\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Monitoreo espera como máximo MEDICIONES_TIMEOUT=3 s. Con la demora en 6 s responde 504; al quitarla vuelve a 200 (si el circuito se abrió, esperar 10 s)."
+    },
+    {
+      "name": "7. Errores (JSON, no HTML)",
+      "item": [
+        {
+          "name": "Ruta desconocida (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/ruta-que-no-existe",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "ruta-que-no-existe"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Método no permitido (405)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 405', function () { pm.response.to.have.status(405); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sensor inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/sensores/99999",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores",
+                "99999"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Medición sin datos (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/mediciones",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "mediciones"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sensor con tipo inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Responde JSON', function () { pm.response.to.be.json; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/sensores",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "sensores"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"x\",\n  \"tipo\": \"invalido\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
