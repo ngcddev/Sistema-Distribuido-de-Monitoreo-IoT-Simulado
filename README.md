@@ -39,7 +39,7 @@ entrada hacia Sensores, Mediciones y Monitoreo. Solo se publican Home (`8080`) y
 flowchart TD
     U["Usuario / cliente HTTP (Postman)"] --> H["Home (Nginx :8080)"]
     U --> G
-    H -- "/sensores /mediciones /monitoreo" --> G["API Gateway :8000<br/>timeout 8 s, 503 / 504"]
+    H -- "/sensores /mediciones /monitoreo" --> G["API Gateway :8000<br/>timeout 15 s, 503 / 504"]
     G -- "/sensores" --> S["Sensores :5003"]
     G -- "/mediciones" --> M["Mediciones :5001"]
     G -- "/monitoreo" --> MO["Monitoreo :5002"]
@@ -132,7 +132,7 @@ defecto en `docker-compose.yml`, por lo que `.env` es opcional.
 | `INTERVALO_SEGUNDOS` | Segundos entre envíos del Simulador | `5` |
 | `MEDICIONES_TIMEOUT` | Timeout (s) de Monitoreo y Simulador hacia Mediciones | `3` |
 | `SENSORES_TIMEOUT` | Timeout (s) de Monitoreo y Simulador hacia Sensores | `2` |
-| `GATEWAY_TIMEOUT` | Timeout (s) del Gateway hacia cualquier servicio | `8` |
+| `GATEWAY_TIMEOUT` | Timeout (s) del Gateway hacia cualquier servicio | `15` |
 | `CB_MAX_FAILS` | Fallas técnicas seguidas que abren el Circuit Breaker | `3` |
 | `CB_TIMEOUT` | Segundos en `OPEN` antes de la solicitud de prueba (`HALF_OPEN`) | `10` |
 | `DELAY_SEGUNDOS` | Demora inicial simulada de Mediciones (pruebas de Timeout) | `0` |
@@ -218,7 +218,7 @@ Simulador → Mediciones/Sensores). Código en [monitoreo/app.py](monitoreo/app.
 |---|---|
 | Servicio que realiza la solicitud | Monitoreo |
 | Servicio protegido | Mediciones (y Sensores) |
-| Timeout configurado | `MEDICIONES_TIMEOUT=3` s (Sensores: `SENSORES_TIMEOUT=2` s; Gateway: `GATEWAY_TIMEOUT=8` s) |
+| Timeout configurado | `MEDICIONES_TIMEOUT=3` s (Sensores: `SENSORES_TIMEOUT=2` s; Gateway: `GATEWAY_TIMEOUT=15` s) |
 | Umbral de fallas | `CB_MAX_FAILS=3` fallas seguidas |
 | Tiempo de recuperación | `CB_TIMEOUT=10` s |
 

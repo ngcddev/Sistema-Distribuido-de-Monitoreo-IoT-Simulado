@@ -22,8 +22,10 @@ SERVICIOS = {
 }
 
 # Timeout (segundos) de cada solicitud reenviada. Debe ser mayor que los timeouts internos de
-# Monitoreo (para que sea Monitoreo quien responda su propio 504 y no el Gateway).
-GATEWAY_TIMEOUT = float(os.environ.get('GATEWAY_TIMEOUT', '8'))
+# Monitoreo (para que sea Monitoreo quien responda su propio 504 y no el Gateway). Además cubre la
+# resolución DNS de un servicio recién detenido, que en Docker Desktop puede tardar varios segundos y
+# que el timeout de `requests` no limita.
+GATEWAY_TIMEOUT = float(os.environ.get('GATEWAY_TIMEOUT', '15'))
 
 CABECERAS_RESPUESTA = ('Content-Type', 'Retry-After')
 

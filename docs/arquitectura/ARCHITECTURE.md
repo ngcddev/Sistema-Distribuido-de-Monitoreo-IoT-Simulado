@@ -16,7 +16,7 @@ correspondiente. Las llamadas de Monitoreo a otros servicios tienen **timeout y 
 flowchart TD
     U["Usuario / cliente HTTP (Postman)"] --> H["Home (Nginx :8080)"]
     U --> G
-    H -- "/sensores /mediciones /monitoreo" --> G["API Gateway :8000<br/>timeout 8 s, 503 / 504"]
+    H -- "/sensores /mediciones /monitoreo" --> G["API Gateway :8000<br/>timeout 15 s, 503 / 504"]
     G -- "/sensores" --> S["Sensores :5003"]
     G -- "/mediciones" --> M["Mediciones :5001"]
     G -- "/monitoreo" --> MO["Monitoreo :5002"]
@@ -85,7 +85,7 @@ quedan en la red interna (`docker-compose.dev.yml` publica los puertos de las AP
 
 | Dependencia | Timeout | Circuit Breaker | Si falla |
 |---|---|---|---|
-| Gateway → cualquier servicio | `GATEWAY_TIMEOUT` = 8 s | No | `504` (timeout) o `503` (caído) |
+| Gateway → cualquier servicio | `GATEWAY_TIMEOUT` = 15 s | No | `504` (timeout) o `503` (caído) |
 | Monitoreo → Mediciones | `MEDICIONES_TIMEOUT` = 3 s | Sí (3 fallas, recuperación 10 s) | `504`, `503` o `502` |
 | Monitoreo → Sensores | `SENSORES_TIMEOUT` = 2 s | Sí (3 fallas, recuperación 10 s) | La evaluación continúa deduciendo el tipo de la unidad |
 | Simulador → Mediciones / Sensores | `MEDICIONES_TIMEOUT` / `SENSORES_TIMEOUT` | Sí | Omite el envío o usa el catálogo de respaldo |

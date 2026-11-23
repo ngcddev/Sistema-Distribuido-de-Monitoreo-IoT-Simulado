@@ -47,7 +47,7 @@ Todas las respuestas de error son JSON `{"error": "..."}`. Los errores del propi
 | Variable | Descripción | Por defecto |
 |---|---|---|
 | `SENSOR_SERVICE_URL`, `MEDICIONES_SERVICE_URL`, `MONITOREO_SERVICE_URL` | Direcciones internas | nombres de servicio de Compose |
-| `GATEWAY_TIMEOUT` | Timeout (s) de cada solicitud reenviada; mayor que los de Monitoreo | `8` |
+| `GATEWAY_TIMEOUT` | Timeout (s) de cada solicitud reenviada; mayor que los de Monitoreo | `15` |
 
 ## Pruebas
 

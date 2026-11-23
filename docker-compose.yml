@@ -132,7 +132,7 @@ services:
       SENSOR_SERVICE_URL: http://sensores:5003
       MEDICIONES_SERVICE_URL: http://mediciones:5001
       MONITOREO_SERVICE_URL: http://monitoreo:5002
-      GATEWAY_TIMEOUT: ${GATEWAY_TIMEOUT:-8}
+      GATEWAY_TIMEOUT: ${GATEWAY_TIMEOUT:-15}
     depends_on:
       mediciones:
         condition: service_healthy
