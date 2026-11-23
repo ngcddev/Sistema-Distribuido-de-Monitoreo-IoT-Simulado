@@ -130,7 +130,7 @@ prueba_persistencia() {
     local id; id=$(id_de)
     req POST /monitoreo/umbrales '{"tipo":"luz","minimo":10,"maximo":900,"unidad":"lx"}'; esperar 201
     local uid; uid=$(id_de)
-    docker compose rm -sf sensores mediciones monitoreo evaluador purgador gateway home simulador >/dev/null 2>&1
+    docker compose rm -sf sensores mediciones monitoreo gateway home simulador >/dev/null 2>&1
     docker compose up -d >/dev/null 2>&1
     esperar_sano gateway
     echo " Tras recrear los contenedores:"

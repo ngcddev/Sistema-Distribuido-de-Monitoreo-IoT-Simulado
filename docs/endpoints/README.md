@@ -2,7 +2,7 @@
 
 Todas las rutas se pueden usar **a través del API Gateway** (`http://localhost:8000`), que es el punto de
 entrada recomendado. Las mismas rutas existen directamente en cada servicio (puertos internos `5001`, `5002` y
-`5003`, publicados solo con `compose.dev.yaml`).
+`5003`, publicados solo con `docker-compose.dev.yml`).
 
 - [ejemplos-gateway.md](ejemplos-gateway.md): ejemplos de cada endpoint por el Gateway, con cuerpos JSON.
 - [postman-endpoints.txt](postman-endpoints.txt): lista de URLs para copiar en Postman.
